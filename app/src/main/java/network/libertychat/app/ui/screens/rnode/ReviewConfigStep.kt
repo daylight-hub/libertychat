@@ -448,9 +448,12 @@ fun ReviewConfigStep(viewModel: RNodeWizardViewModel) {
                     )
                 }
 
-                // LCS: TX-power ceilings by RNode hardware
+                // LCS: TX-power ceiling for the board actually detected, with the
+                // other boards' figures kept alongside for reference.
+                val boardProfile = state.boardProfile
                 Text(
-                    "Heltec V4 radio — max 28 dBm · RAK or LILYGO — max 22 dBm",
+                    "${boardProfile.displayName} detected — ${boardProfile.txPowerCeiling} dBm default · " +
+                        "Heltec V4 max 28 dBm · RAK or LILYGO max 22 dBm",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

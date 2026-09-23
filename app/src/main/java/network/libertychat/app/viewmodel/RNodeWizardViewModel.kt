@@ -188,10 +188,11 @@ data class RNodeWizardState(
     val spreadingFactor: String = "11",
     // Long Fast default (4/5)
     val codingRate: String = "5",
-    // LCS: 22 dBm — the SX127x hardware maximum, and the LCS default for
-    // RNode links. Note this is still overridden by the regional preset's
-    // defaultTxPower when a region is picked and the user has not edited the
-    // field (see applyRegion below), so regulatory limits per band still win.
+    // LCS: 22 dBm — safe across every board LCS ships, used until the board is
+    // known. Overridden by the regional preset's board-aware default once a
+    // region is picked and the user has not edited the field (see applyRegion
+    // below), so both the board ceiling and per-band regulatory limits win over
+    // this figure.
     val txPower: String = "22",
     val stAlock: String = "",
     val ltAlock: String = "",
@@ -252,6 +253,21 @@ data class RNodeWizardState(
 
     fun interfaceNameAfterSelecting(device: DiscoveredRNode): String =
         if (isPairingRepairMode) interfaceName else defaultInterfaceNameFor(device)
+
+    /**
+     * LCS: the board family of the RNode being configured, which sets the TX
+     * power ceiling (28 dBm on a Heltec V4, 22 on the RAK/LILYGO boards).
+     *
+     * Derived rather than stored so every path that sets a device — USB pick,
+     * Bluetooth pick, manual entry, or an existing interface loaded for editing
+     * — gets the right answer without each one having to remember to set it.
+     */
+    val boardProfile: network.libertychat.app.data.model.RNodeBoardProfile
+        get() =
+            network.libertychat.app.data.model.RNodeBoardProfile.detect(
+                usbDevice = selectedUsbDevice,
+                bluetoothDeviceName = selectedDevice?.name,
+            )
 }
 
 /**
@@ -763,6 +779,26 @@ class RNodeWizardViewModel
                 state.connectionType != RNodeConnectionType.BLUETOOTH ||
                 !state.selectedDevice?.address.isNullOrBlank()
 
+        /**
+         * LCS: re-derive only the TX power default after the selected device —
+         * and therefore the board ceiling — changes.
+         *
+         * Deliberately narrower than [applyFrequencyRegionSettings]: that also
+         * rewrites frequency and airtime locks, which would discard a frequency
+         * slot the user had already chosen if they stepped back to swap devices.
+         */
+        private fun applyBoardTxPowerDefault() {
+            if ("txPower" in userModifiedFields) return
+            val state = _state.value
+            val region = state.selectedFrequencyRegion ?: return
+            _state.update {
+                it.copy(
+                    txPower = region.defaultTxPowerFor(it.boardProfile.txPowerCeiling).toString(),
+                    txPowerError = null,
+                )
+            }
+        }
+
         private fun applyFrequencyRegionSettings() {
             val region = _state.value.selectedFrequencyRegion ?: return
 
@@ -781,7 +817,14 @@ class RNodeWizardViewModel
                 it.copy(
                     frequency = if ("frequency" !in userModifiedFields) region.frequency.toString() else it.frequency,
                     frequencyError = if ("frequency" !in userModifiedFields) null else it.frequencyError,
-                    txPower = if ("txPower" !in userModifiedFields) region.defaultTxPower.toString() else it.txPower,
+                    // LCS: board-aware default — the Heltec V4 ceiling is 28 dBm,
+                    // other boards 22, and the region clamps both where it is lower.
+                    txPower =
+                        if ("txPower" !in userModifiedFields) {
+                            region.defaultTxPowerFor(it.boardProfile.txPowerCeiling).toString()
+                        } else {
+                            it.txPower
+                        },
                     txPowerError = if ("txPower" !in userModifiedFields) null else it.txPowerError,
                     stAlock = if ("stAlock" !in userModifiedFields) airtimeLimit else it.stAlock,
                     stAlockError = if ("stAlock" !in userModifiedFields) null else it.stAlockError,
@@ -1353,6 +1396,9 @@ class RNodeWizardViewModel
                         },
                 )
             }
+            // LCS: the board ceiling may have changed with the device, so
+            // re-derive the TX power default. No-ops until a region is set.
+            applyBoardTxPowerDefault()
         }
 
         private fun isEligibleRepairDevice(device: DiscoveredRNode): Boolean {
@@ -1888,6 +1934,9 @@ class RNodeWizardViewModel
                         interfaceName = newInterfaceName,
                     )
                 }
+                // LCS: the board ceiling may have changed with the device, so
+                // re-derive the TX power default. No-ops until a region is set.
+                applyBoardTxPowerDefault()
             } else {
                 requestUsbPermission(device)
             }

@@ -148,13 +148,20 @@ enum class ModemPreset(
         codingRate = 5,
         description = "Slower speed, medium range",
     ),
+    LONG_RANGE_TURBO(
+        displayName = "Long Range / Turbo",
+        spreadingFactor = 11,
+        bandwidth = 500000,
+        codingRate = 8,
+        description = "1.34 kbps — long range on a 500 kHz channel",
+    ),
     LONG_FAST(
         displayName = "Long Fast",
         spreadingFactor = 11,
         bandwidth = 250000,
         codingRate = 5,
         description = "Good balance of speed and range",
-        lcsBadge = "LCS Recommended",
+        lcsBadge = "Default",
     ),
     LONG_MODERATE(
         displayName = "Long Moderate",
@@ -228,7 +235,19 @@ data class FrequencyRegion(
      * the US, Australia, Brazil, India and similar, and the regulatory figure
      * everywhere else.
      */
-    val defaultTxPower: Int get() = minOf(LCS_DEFAULT_TX_POWER, maxTxPower)
+    val defaultTxPower: Int get() = defaultTxPowerFor(LCS_DEFAULT_TX_POWER)
+
+    /**
+     * LCS: recommended default TX power for a specific board, in dBm.
+     *
+     * [boardCeiling] is the hardware maximum of the RNode being configured —
+     * [RNodeBoardProfile.txPowerCeiling], so 28 on a Heltec V4 and 22 on the RAK
+     * and LILYGO boards. The regional limit still wins where it is lower, which
+     * is why this is a `minOf` and not the board figure directly: EU 868 is 14
+     * dBm by regulation, and a 28 dBm default there would be both illegal and
+     * rejected by the wizard's own validation.
+     */
+    fun defaultTxPowerFor(boardCeiling: Int): Int = minOf(boardCeiling, maxTxPower)
 
     /** Center frequency (for backwards compatibility and defaults) */
     val frequency: Long get() = (frequencyStart + frequencyEnd) / 2
@@ -241,10 +260,12 @@ data class FrequencyRegion(
 
     companion object {
         /**
-         * LCS default TX power in dBm, before per-region clamping.
+         * LCS fallback TX power in dBm, before per-region clamping.
          *
-         * 22 dBm: hardware maximum for RAK and LILYGO RNodes. Heltec V4 will do
-         * 28, but 22 is the figure that is safe across the boards LCS ships.
+         * 22 dBm: hardware maximum for RAK and LILYGO RNodes, and the figure
+         * that is safe across every board LCS ships. Used when the board is
+         * unknown; when it is known, the wizard passes that board's ceiling to
+         * [defaultTxPowerFor] instead (28 on a Heltec V4).
          */
         const val LCS_DEFAULT_TX_POWER = 22
     }

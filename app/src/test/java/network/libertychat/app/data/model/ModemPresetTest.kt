@@ -140,8 +140,16 @@ class ModemPresetTest {
     // ========== Enum Completeness Tests ==========
 
     @Test
-    fun `all 8 presets exist`() {
-        assertEquals(8, ModemPreset.entries.size)
+    fun `all 9 presets exist`() {
+        assertEquals(9, ModemPreset.entries.size)
+    }
+
+    @Test
+    fun `long range turbo preset has LCS parameters`() {
+        val turbo = ModemPreset.LONG_RANGE_TURBO
+        assertEquals(11, turbo.spreadingFactor)
+        assertEquals(500_000, turbo.bandwidth)
+        assertEquals(8, turbo.codingRate)
     }
 
     @Test
