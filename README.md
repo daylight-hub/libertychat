@@ -35,14 +35,16 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
 
 - RNode default frequency: US **slot 51 = 914.875 MHz** (LCS standard).
 - RNode default TX power is **board-aware**: **28 dBm** on a Heltec V4, **22
-  dBm** on the RAK / LILYGO boards. Default interface mode **Full**. Per-region
-  defaults are still clamped to each band's regulatory maximum, so EU 868 stays
-  at 14 dBm and EU 433 at 12 whatever the board can do.
+  dBm** on RAK, **20 dBm** on LILYGO, and 22 when the board is not identified.
+  Default interface mode **Full**. Per-region defaults are still clamped to each
+  band's regulatory maximum, so EU 868 stays at 14 dBm and EU 433 at 12 whatever
+  the board can do. With no region selected — custom mode, or editing an
+  existing interface — the ceiling is **30 dBm**.
 - The board is identified from the USB descriptor or the Bluetooth name. A
   Heltec V4 drives its USB port from the ESP32-S3 directly (`303A:1001`), which
   is what the wizard looks for; a board that names itself something else — a
-  LILYGO T3S3, say — keeps the 22 dBm default. The hint under the power field
-  names the board detected, and the figure is only a pre-filled default.
+  LILYGO T3S3, say — keeps its own 20 dBm default. The hint under the power
+  field names the board detected, and the figure is only a pre-filled default.
 - **Long Fast** badged *Default* for general use; **Short Fast** badged
   *Best for voice over LoRa* — at ~10.9 kbps it is the slowest preset that can
   actually carry a live call, against Long Fast's ~1.07 kbps.
@@ -98,5 +100,3 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
 
 The `kotlinBackend` flavor uses reticulum-kt `v0.0.21` and LXMF-kt `v0.0.13`
 instead. LCS ships the `pythonBackend` flavor.
-
-See `APPLY.md` for how this branch was produced and the items that need your input.

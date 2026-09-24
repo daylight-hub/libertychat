@@ -339,8 +339,8 @@ class AnnounceStreamScreenTest {
     @Test
     fun filterChips_tappingAll_restoresFullSetFromSingle() {
         // Start with a single aspect (Peers); tapping the All chip directly
-        // must restore all 3 node types + re-enable audio. Greptile flagged
-        // that the All-click path had no direct coverage.
+        // must restore all 3 node types + re-enable audio. Regression cover
+        // for the All-click path, which previously had none.
         val mockViewModel =
             createMockAnnounceStreamViewModel(
                 selectedNodeTypes = setOf(NodeType.PEER),

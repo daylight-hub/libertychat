@@ -98,21 +98,24 @@ release/.envrc
 .envrc
 .python-version
 
-# Auto Claude data directory
-.auto-claude/
 .worktrees/
 python/ble_modules/BLEAgent.py
 python/ble_modules/BLEFragmentation.py
-.letta/
 LINK_SPEED_PROBE_DESIGN.md
 sentry-wizard
 
-# Claude Code / claude-flow tooling
-.claude/*
-!.claude/skills/
-.claude/skills/*
-!.claude/skills/columba-python-migration/
+# Local assistant/agent tooling and scratch planning — never tracked
+.auto-claude/
+.claude/
 .claude-flow/
-.planning/
+.claude_settings.json
+CLAUDE.md
+AGENTS.md
+.cursor/
+.cursorrules
+.aider*
+.github/copilot-instructions.md
+.letta/
 .swarm/
+.planning/
 .mcp.json

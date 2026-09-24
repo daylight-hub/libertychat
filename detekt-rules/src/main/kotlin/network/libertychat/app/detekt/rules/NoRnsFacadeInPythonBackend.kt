@@ -67,7 +67,7 @@ class NoRnsFacadeInPythonBackend(
                         "Forbidden Python facade file '$facadeName' under " +
                             ":rns-backend-py/src/main/python/. The slim-Python design " +
                             "forbids rns_*.py facades — Kotlin sub-impls call upstream " +
-                            "RNS/LXMF directly via PyObject. See :rns-backend-py/CLAUDE.md.",
+                            "RNS/LXMF directly via PyObject. See :rns-backend-py/ARCHITECTURE.md.",
                 ),
             )
         }

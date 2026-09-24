@@ -237,10 +237,21 @@ class RNodeConfigValidatorTest {
 
     @Test
     fun `validateTxPower without region uses default max`() {
-        // Default max is 22
-        val result = RNodeConfigValidator.validateTxPower("25", null)
+        // LCS: default max is 30 dBm, not 22.
+        val result = RNodeConfigValidator.validateTxPower("31", null)
         assertFalse(result.isValid)
-        assertTrue(result.errorMessage!!.contains("22"))
+        assertTrue(result.errorMessage!!.contains("30"))
+    }
+
+    @Test
+    fun `validateTxPower without region accepts a heltec v4 default`() {
+        // Regression: selectedFrequencyRegion is null both in custom mode and
+        // when editing an existing interface, and the old 22 dBm no-region cap
+        // silently rejected any saved config above it - including every Heltec
+        // V4 interface saved at its 28 dBm default, which made the Save button
+        // appear dead. 28 must validate when no region is selected.
+        assertTrue(RNodeConfigValidator.validateTxPower("28", null).isValid)
+        assertTrue(RNodeConfigValidator.validateTxPower("30", null).isValid)
     }
 
     @Test
@@ -484,7 +495,7 @@ class RNodeConfigValidatorTest {
 
     @Test
     fun `getMaxTxPower returns default without region`() {
-        assertEquals(22, RNodeConfigValidator.getMaxTxPower(null))
+        assertEquals(30, RNodeConfigValidator.getMaxTxPower(null))
     }
 
     @Test

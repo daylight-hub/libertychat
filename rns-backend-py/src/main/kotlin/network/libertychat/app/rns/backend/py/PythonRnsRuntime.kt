@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * The six `PythonRns*` sub-impls hold a shared instance of this and call
  * upstream RNS/LXMF directly through these PyObjects — there is no Python
- * facade. See the module CLAUDE.md.
+ * facade. See the module ARCHITECTURE.md.
  *
  * Threading: every method here is expected to be called from
  * `Dispatchers.IO` (the sub-impls wrap their calls in [pyResult] / [pyCall]).

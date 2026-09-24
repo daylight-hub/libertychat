@@ -32,7 +32,7 @@ import network.libertychat.app.rns.api.util.hexToBytes
  * Already-built [PyObject]s and every other element type pass through
  * unchanged.
  *
- * See the module CLAUDE.md. Use at *every* `callAttr` site that takes a
+ * See the module ARCHITECTURE.md. Use at *every* `callAttr` site that takes a
  * list parameter.
  */
 fun List<*>.toPyList(): PyObject {

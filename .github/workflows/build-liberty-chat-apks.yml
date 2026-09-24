@@ -58,7 +58,7 @@ jobs:
             # Prefer an exact tag on the release commit (e.g. v1.0.0). Fall back to the
             # first-release version rather than the upstream ancestor tag (v2.0.9).
             VERSION="$(git describe --tags --exact-match 2>/dev/null | sed 's/^v//')"
-            [ -z "$VERSION" ] && VERSION="2.0.7"
+            [ -z "$VERSION" ] && VERSION="2.0.8"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building Liberty Chat APKs for version $VERSION"

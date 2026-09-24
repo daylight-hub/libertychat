@@ -6,7 +6,7 @@
 // `PythonRnsRuntime` and calls upstream RNS/LXMF methods directly via
 // `PyObject.callAttr(...)` — Python is the protocol stack, not a wrapper layer.
 //
-// SLIM-PYTHON DISCIPLINE (see CLAUDE.md in this module):
+// SLIM-PYTHON DISCIPLINE (see ARCHITECTURE.md in this module):
 //   - The Python tree contains ONLY upstream RNS/LXMF wheels + the
 //     architecturally-forced interface adapters (BLE/RNode/USB `RNS.Interface`
 //     subclasses) + Chaquopy env stubs + the ~50-line `event_bridge.py`

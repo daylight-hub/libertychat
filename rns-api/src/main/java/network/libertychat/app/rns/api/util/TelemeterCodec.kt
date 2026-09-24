@@ -41,7 +41,7 @@ import kotlin.math.round
  *
  * Both Python backends previously had ~190 lines of Columba-custom
  * Telemeter encoding in `event_bridge.py`; consolidating here means
- * the Python tree stays slim (per the rns-backend-py CLAUDE.md
+ * the Python tree stays slim (per the rns-backend-py ARCHITECTURE.md
  * "ONE Columba-authored Python file" rule) AND drift between two
  * codec implementations of the same Sideband-interop wire format
  * is impossible — they're the same code.

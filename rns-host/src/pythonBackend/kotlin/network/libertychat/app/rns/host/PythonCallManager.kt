@@ -41,7 +41,7 @@ import tech.torlando.lxst.telephone.Telephone
  * audio stack (LXST-kt) is identical across backends; only the network
  * transport differs ([PythonNetworkTransport] routes through Python RNS
  * via Chaquopy). All call-state logic lives here in Kotlin per the
- * slim-Python rule (`:rns-backend-py/CLAUDE.md`); `event_bridge.py`
+ * slim-Python rule (`:rns-backend-py/ARCHITECTURE.md`); `event_bridge.py`
  * carries only the per-callback bridge primitives.
  *
  * Setup auto-fires when the backend reaches READY — observer pattern

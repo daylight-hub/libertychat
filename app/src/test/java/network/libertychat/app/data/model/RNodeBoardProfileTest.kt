@@ -43,8 +43,18 @@ class RNodeBoardProfileTest {
     }
 
     @Test
-    fun `standard board ceiling is 22 dBm`() {
-        assertEquals(22, RNodeBoardProfile.STANDARD.txPowerCeiling)
+    fun `rak ceiling is 22 dBm`() {
+        assertEquals(22, RNodeBoardProfile.RAK.txPowerCeiling)
+    }
+
+    @Test
+    fun `lilygo ceiling is 20 dBm`() {
+        assertEquals(20, RNodeBoardProfile.LILYGO.txPowerCeiling)
+    }
+
+    @Test
+    fun `unknown board falls back to 22 dBm`() {
+        assertEquals(22, RNodeBoardProfile.UNKNOWN.txPowerCeiling)
     }
 
     // ========== Detection ==========
@@ -58,7 +68,7 @@ class RNodeBoardProfileTest {
     @Test
     fun `uart bridge device is a standard board`() {
         // CH340 bridge - not an ESP32-S3 native USB device.
-        assertEquals(RNodeBoardProfile.STANDARD, RNodeBoardProfile.detect(usb()))
+        assertEquals(RNodeBoardProfile.UNKNOWN, RNodeBoardProfile.detect(usb()))
     }
 
     @Test
@@ -72,7 +82,7 @@ class RNodeBoardProfileTest {
     @Test
     fun `named heltec v3 is not a v4`() {
         assertEquals(
-            RNodeBoardProfile.STANDARD,
+            RNodeBoardProfile.UNKNOWN,
             RNodeBoardProfile.detect(usb(productName = "Heltec WiFi LoRa 32 V3")),
         )
     }
@@ -80,11 +90,21 @@ class RNodeBoardProfileTest {
     @Test
     fun `named board wins over the esp32-s3 usb fallback`() {
         // A LILYGO T3S3 is also an ESP32-S3 on native USB, but names itself, so
-        // it must not inherit the 28 dBm default.
+        // it must not inherit the Heltec V4 28 dBm default.
         assertEquals(
-            RNodeBoardProfile.STANDARD,
+            RNodeBoardProfile.LILYGO,
             RNodeBoardProfile.detect(esp32S3Usb(productName = "LILYGO T3S3")),
         )
+    }
+
+    @Test
+    fun `rak is detected by name`() {
+        assertEquals(RNodeBoardProfile.RAK, RNodeBoardProfile.detect(usb(productName = "RAK4631")))
+    }
+
+    @Test
+    fun `lilygo is detected by name`() {
+        assertEquals(RNodeBoardProfile.LILYGO, RNodeBoardProfile.detect(usb(productName = "LILYGO T3S3")))
     }
 
     @Test
@@ -98,7 +118,7 @@ class RNodeBoardProfileTest {
     @Test
     fun `unknown device falls back to the safe standard profile`() {
         assertEquals(
-            RNodeBoardProfile.STANDARD,
+            RNodeBoardProfile.UNKNOWN,
             RNodeBoardProfile.detect(usbDevice = null, bluetoothDeviceName = "RNode 1a2b"),
         )
     }
@@ -112,9 +132,15 @@ class RNodeBoardProfileTest {
     }
 
     @Test
-    fun `us region keeps other boards at 22 dBm`() {
+    fun `us region keeps rak at 22 dBm`() {
         val us = FrequencyRegions.findById("us_915")!!
-        assertEquals(22, us.defaultTxPowerFor(RNodeBoardProfile.STANDARD.txPowerCeiling))
+        assertEquals(22, us.defaultTxPowerFor(RNodeBoardProfile.RAK.txPowerCeiling))
+    }
+
+    @Test
+    fun `us region keeps lilygo at 20 dBm`() {
+        val us = FrequencyRegions.findById("us_915")!!
+        assertEquals(20, us.defaultTxPowerFor(RNodeBoardProfile.LILYGO.txPowerCeiling))
     }
 
     @Test
@@ -131,9 +157,14 @@ class RNodeBoardProfileTest {
     @Test
     fun `no region default ever exceeds its regulatory maximum`() {
         FrequencyRegions.regions.forEach { region ->
-            val heltec = region.defaultTxPowerFor(RNodeBoardProfile.HELTEC_V4.txPowerCeiling)
-            assert(heltec <= region.maxTxPower) {
-                "${region.id} Heltec V4 default $heltec exceeds max ${region.maxTxPower}"
+            RNodeBoardProfile.entries.forEach { board ->
+                val default = region.defaultTxPowerFor(board.txPowerCeiling)
+                assert(default <= region.maxTxPower) {
+                    "${region.id} ${board.name} default $default exceeds max ${region.maxTxPower}"
+                }
+                assert(default <= board.txPowerCeiling) {
+                    "${region.id} ${board.name} default $default exceeds board ceiling ${board.txPowerCeiling}"
+                }
             }
         }
     }

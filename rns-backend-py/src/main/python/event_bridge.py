@@ -13,7 +13,7 @@ JNI hop per event instead of one hop per attribute read.
 Everything else in this module's package is either upstream wheels or
 architecturally-forced RNS.Interface adapters. There is deliberately NO
 `rns_*.py` facade: the Kotlin sub-impls in `:rns-backend-py` call upstream
-RNS/LXMF directly via PyObject. See this module's CLAUDE.md.
+RNS/LXMF directly via PyObject. See this module's ARCHITECTURE.md.
 
 Contract with Kotlin
 --------------------
@@ -55,7 +55,7 @@ _COLLECTOR_RETENTION_SECONDS = 24 * 60 * 60
 # so both backends — Kotlin-native and Python-Chaquopy — share one
 # implementation of the Sideband-interop bit-format. The Python tree
 # now stays at "ONE Columba-authored file with logic" per
-# rns-backend-py's CLAUDE.md slim-Python rule.
+# rns-backend-py's ARCHITECTURE.md slim-Python rule.
 
 
 # ----------------------------------------------------------------------------
