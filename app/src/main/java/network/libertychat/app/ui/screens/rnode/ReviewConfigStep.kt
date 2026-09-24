@@ -398,7 +398,9 @@ fun ReviewConfigStep(viewModel: RNodeWizardViewModel) {
                 Spacer(Modifier.height(8.dp))
 
                 // SF, CR, TX Power row
-                val maxTxPower = regionLimits?.maxTxPower ?: 22
+                // LCS: 30 dBm when no region is selected (custom mode, or editing an
+                // existing interface) — matches the validator's own no-region ceiling.
+                val maxTxPower = regionLimits?.maxTxPower ?: 30
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -453,7 +455,7 @@ fun ReviewConfigStep(viewModel: RNodeWizardViewModel) {
                 val boardProfile = state.boardProfile
                 Text(
                     "${boardProfile.displayName} detected — ${boardProfile.txPowerCeiling} dBm default · " +
-                        "Heltec V4 max 28 dBm · RAK or LILYGO max 22 dBm",
+                        "Heltec V4 max 28 · RAK max 22 · LILYGO max 20 dBm",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

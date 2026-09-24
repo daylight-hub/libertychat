@@ -790,6 +790,9 @@ class RNodeWizardViewModel
         private fun applyBoardTxPowerDefault() {
             if ("txPower" in userModifiedFields) return
             val state = _state.value
+            // Never rewrite the TX power of an interface being edited: the value
+            // on screen is the one the user saved, not a default to re-derive.
+            if (state.editingInterfaceId != null) return
             val region = state.selectedFrequencyRegion ?: return
             _state.update {
                 it.copy(
@@ -3632,9 +3635,33 @@ class RNodeWizardViewModel
             return result.isValid
         }
 
+        /**
+         * LCS: the first field error in the state, for the save banner.
+         *
+         * Ordered the way the fields appear on the review screen so the message
+         * names whichever problem the user hits first.
+         */
+        private fun firstValidationError(state: RNodeWizardState): String? =
+            listOfNotNull(
+                state.nameError,
+                state.frequencyError,
+                state.bandwidthError,
+                state.spreadingFactorError,
+                state.codingRateError,
+                state.txPowerError,
+                state.stAlockError,
+                state.ltAlockError,
+            ).firstOrNull()
+
         @Suppress("CyclomaticComplexMethod", "LongMethod")
         fun saveConfiguration() {
-            if (!validateConfiguration()) return
+            if (!validateConfiguration()) {
+                // LCS: say why. This used to return silently, so a config that
+                // failed validation looked like a dead Save button — the field
+                // error was set, but it is not necessarily on screen.
+                _state.update { it.copy(saveError = firstValidationError(it) ?: "Check the highlighted fields.") }
+                return
+            }
             if (!hasRequiredBluetoothEditIdentity(_state.value)) {
                 _state.update {
                     it.copy(saveError = "Select the original RNode before updating this interface.")

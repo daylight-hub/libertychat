@@ -54,7 +54,22 @@ object RNodeConfigValidator {
     private const val MIN_CR = 5
     private const val MAX_CR = 8
     private const val MIN_TX_POWER = 0
-    private const val DEFAULT_MAX_TX_POWER = 22
+
+    /**
+     * TX power ceiling used when no region is selected, in dBm.
+     *
+     * LCS: 30 dBm, the highest figure any supported band allows, rather than the
+     * old 22. `selectedFrequencyRegion` is null in two ordinary situations —
+     * custom mode (`enableCustomMode` clears it) and editing an existing
+     * interface (the edit path never sets it) — so a 22 dBm cap here silently
+     * rejected any config above 22, including every Heltec V4 interface saved at
+     * its 28 dBm default. `saveConfiguration` returns without a message when
+     * validation fails, so that surfaced as "the save button does nothing".
+     *
+     * A region, when one is selected, still clamps to its own regulatory
+     * maximum, so EU 868 remains 14 dBm.
+     */
+    private const val DEFAULT_MAX_TX_POWER = 30
 
     // Default frequency range (when no region is selected)
     private const val DEFAULT_MIN_FREQ = 137_000_000L
