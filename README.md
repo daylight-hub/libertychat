@@ -2,20 +2,15 @@
 
 *Powered by Torlando-Tech's Columba.*
 
-**A Liberty Communication Systems, Inc. (LCS) distribution of Columba** — native
-Android messaging & voice over LXMF / Reticulum (Bluetooth LE, TCP, or RNode LoRa).
+**A Liberty Communication Systems, Inc. (LCS) distribution of Columba** — A Reticulum messaging & voice app for Android (Bluetooth LE, TCP, or RNode LoRa).
 
 Built on [Columba](https://github.com/torlando-tech/columba) by torlando-tech
 (MPL 2.0). Original design and code are theirs; LCS branding and the changes
 below are Liberty Communication Systems, Inc.
 
-**Current release: v1.2.1** (forked from Columba 2.0.9). The release workflow
-derives the version from the tag, so tagging the build commit `v1.2.1` is what
-makes the in-app version and APK filenames read `1.2.1`.
-
 Full history is in [CHANGELOG.md](CHANGELOG.md).
 
-## What LCS changes
+## Features
 
 ### Messaging
 
@@ -65,29 +60,7 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
   AutoInterface and Bluetooth LE only — nothing reaches the internet until the
   user adds a server or attaches an RNode. Upstream's Beleth RNS Hub seed is
   removed and deleted from existing installs on upgrade.
-- When adding a TCP server, the list offers LCS infrastructure:
-  **public.lcs.network:4245** and **iprnode.local:4545**, plus Custom.
-
-### Identity
-
-- Renamed to **Liberty Chat** throughout, with the LCS logo across launcher
-  densities and a "Liberty Chat — powered by Columba" splash wordmark that
-  renders correctly on every supported Android version.
-- Liberty theme: navy / gold / silver.
-- **Buy RNode Radios** call-to-action in Settings → About, linking to
-  `www.lcs.network`.
-- Share-APK serves `liberty-chat-<version>.apk`.
-- Update checks target `daylight-hub/columba`, so "Check for Updates" and
-  "View Release" track LCS builds.
-- Removed: *Report Bug*, the GitHub / Report an Issue / About Reticulum links,
-  and the crash-reporting opt-in popup.
-- About credits torlando-tech (original) and LCS (distribution); MPL 2.0
-  retained.
-
-### Build
-
-- **Build Liberty Chat APKs** Actions workflow — one-click build of the four
-  no-Sentry `official-rns-py` APKs.
+- When adding a TCP server, the list offers the LCS Gateway or a local IP RNode.
 
 ## Upstream stack
 
@@ -97,6 +70,3 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
 | RNS (Python) | 1.1.9 — `torlando-tech/Reticulum`, pinned commit |
 | LXMF (Python) | 0.9.2 — `torlando-tech/LXMF`, pinned commit |
 | LXST | LXST-kt `v0.0.4` (Kotlin; no Python LXST) |
-
-The `kotlinBackend` flavor uses reticulum-kt `v0.0.21` and LXMF-kt `v0.0.13`
-instead. LCS ships the `pythonBackend` flavor.
