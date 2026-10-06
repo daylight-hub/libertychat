@@ -67,7 +67,11 @@ internal object RNodeConnectionHelper {
                     // scope is never touched. If that invariant ever changes upstream, wrap
                     // this in a dedicated child scope the way startBleInterface does.
                     parentScope = scope,
-                    displayImageData = if (config.enableFramebuffer) hostBridge.rnodeFramebufferData() else null,
+                    // LCS: never push a vendor logo to the RNode screen. Null tells
+                    // RNodeInterface to leave the external framebuffer disabled, so
+                    // the RNode keeps its own UI — including on TCP links, where a
+                    // latched logo used to outlive the app's connection.
+                    displayImageData = null,
                 )
             iface.onPacketReceived = { data, fromInterface ->
                 Transport.inbound(

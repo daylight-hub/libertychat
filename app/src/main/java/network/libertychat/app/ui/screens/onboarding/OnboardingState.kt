@@ -41,6 +41,19 @@ enum class OnboardingInterfaceType(
         description = "Connect directly to nearby devices",
         secondaryDescription = "Requires Bluetooth permissions",
     ),
+
+    /**
+     * LCS: direct TCP path to a Command Center on the local network. Offered
+     * separately from [AUTO] because AutoInterface's multicast discovery is the
+     * part that fails on routers that drop multicast — when it does, this is how
+     * a fresh install still reaches the Command Center. Creates a TCPClient
+     * interface pointed at `liberty.local:4246`.
+     */
+    COMMAND_CENTER(
+        displayName = "Command Center PRO",
+        description = "Connect to a Command Center over your network",
+        secondaryDescription = "liberty.local:4246 · Use if Local WiFi can't find it",
+    ),
     TCP(
         displayName = "Internet (TCP)",
         description = "Connect to the global Reticulum network",

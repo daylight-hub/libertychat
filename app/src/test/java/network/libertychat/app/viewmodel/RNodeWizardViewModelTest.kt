@@ -986,13 +986,14 @@ class RNodeWizardViewModelTest {
 
             viewModel.state.test {
                 val initial = awaitItem()
-                assertTrue(initial.enableFramebuffer) // Default true
+                // LCS: default false — no vendor logo on the RNode screen
+                assertFalse(initial.enableFramebuffer)
 
-                viewModel.updateEnableFramebuffer(false)
+                viewModel.updateEnableFramebuffer(true)
                 advanceUntilIdle()
 
                 val updated = awaitItem()
-                assertFalse(updated.enableFramebuffer)
+                assertTrue(updated.enableFramebuffer)
             }
         }
 
@@ -2841,7 +2842,14 @@ class RNodeWizardViewModelTest {
 
             viewModel.state.test {
                 var state = awaitItem()
-                assertTrue(state.enableFramebuffer) // Default is true
+                // LCS: default false — no vendor logo on the RNode screen
+                assertFalse(state.enableFramebuffer)
+
+                viewModel.updateEnableFramebuffer(true)
+                advanceUntilIdle()
+
+                state = awaitItem()
+                assertTrue(state.enableFramebuffer)
 
                 viewModel.updateEnableFramebuffer(false)
                 advanceUntilIdle()

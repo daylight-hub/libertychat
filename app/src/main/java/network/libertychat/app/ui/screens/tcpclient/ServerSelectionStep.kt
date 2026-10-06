@@ -150,6 +150,21 @@ private fun ServerCard(
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
                 )
+                // LCS: short hint for entries whose purpose isn't obvious from
+                // the name — currently the local Command Center fallback.
+                server.note?.let { note ->
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color =
+                            if (isSelected) {
+                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            },
+                    )
+                }
             }
 
             if (isSelected) {

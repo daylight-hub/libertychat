@@ -328,7 +328,8 @@ class InterfaceRepository
                             mode = json.optString("mode", "full"),
                             networkName = json.optString("network_name", "").ifEmpty { null },
                             passphrase = json.optString("passphrase", "").ifEmpty { null },
-                            enableFramebuffer = json.optBoolean("enable_framebuffer", true),
+                            // LCS: defaults false — no vendor logo on the RNode screen
+                            enableFramebuffer = json.optBoolean("enable_framebuffer", false),
                             networkRestriction = parseRestriction(json, defaultForType = NetworkRestriction.ANY),
                         )
                     }

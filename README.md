@@ -43,6 +43,9 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
 - **Long Fast** badged *Default* for general use; **Short Fast** badged
   *Best for voice over LoRa* — at ~10.9 kbps it is the slowest preset that can
   actually carry a live call, against Long Fast's ~1.07 kbps.
+- **Medium Fast** and **Medium Slow** badged *Works well with repeaters* — at
+  SF9–10 on a 250 kHz channel they leave a repeater enough airtime headroom to
+  hear, decode and re-transmit a frame before the next one arrives.
 - **Long Range / Turbo** (SF11 / 500 kHz / CR 4:8, ~1.34 kbps) for more
   throughput than Long Fast on a wider channel.
 - **Codec2 3200** badged *Voice/PTT* in the call quality picker.
@@ -50,7 +53,11 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
   too slow for the codec in use, the call screen offers a picker covering both
   Codec2 and Opus, plus a push-to-talk suggestion. Switching signals the peer,
   so both ends move — including Sideband and MeshChat peers.
-- *Display Logo on RNode* option removed from the wizard.
+- No vendor logo on the RNode's own screen. The *Display Logo on RNode* option
+  is gone from the wizard, and the backend now disables the RNode's external
+  framebuffer on every connect, so the panel keeps its own UI. Previously the
+  logo could stay latched on the display — most visibly on an RNode reached over
+  IP, where nothing cleared it when the app disconnected.
 - Built-in RNode flasher entry removed from Settings — LCS ships pre-flashed
   hardware.
 
@@ -60,7 +67,13 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
   AutoInterface and Bluetooth LE only — nothing reaches the internet until the
   user adds a server or attaches an RNode. Upstream's Beleth RNS Hub seed is
   removed and deleted from existing installs on upgrade.
-- When adding a TCP server, the list offers the LCS Gateway or a local IP RNode.
+- When adding a TCP server, the list offers the LCS Gateway, a local IP RNode,
+  or a **Command Center PRO Client** (`liberty.local:4246`).
+- **Command Center PRO over TCP** is offered as its own choice during onboarding
+  and in Add Interface → TCP Client. It is the way to reach a Command Center
+  when AutoInterface can't find it — its multicast discovery doesn't survive
+  every router. Never configured as a bootstrap interface, so it stays attached
+  rather than auto-detaching once other interfaces come up.
 
 ## Upstream stack
 

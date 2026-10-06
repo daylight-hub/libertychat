@@ -9,6 +9,45 @@ upstream; upstream's own history is not repeated here.
 
 ---
 
+## 2.0.9 — 2026-10-06
+
+### Added
+
+- **Command Center PRO over TCP** (`liberty.local:4246`), as an alternative way
+  in when AutoInterface can't find the Command Center — its multicast discovery
+  doesn't survive every router, and some guest networks block peer-to-peer
+  traffic outright.
+  - Offered in **Add Interface → TCP Client**, listed under the local IP RNode,
+    with a note saying when to reach for it.
+  - Offered during **onboarding** as its own choice on the "How will you
+    connect?" screen, so a first run that can't see the Command Center over
+    Local WiFi still has a route to it.
+  - Never configured as a bootstrap interface. A bootstrap link auto-detaches
+    once enough other interfaces are connected, which is the wrong behaviour
+    for the user's own Command Center.
+  - It is tracked by its host and port rather than by interface type, so it and
+    the LCS public node coexist as two separate TCP interfaces instead of
+    overwriting one another.
+- **Medium Fast** and **Medium Slow** modem presets badged *Works well with
+  repeaters*. At SF9–10 on a 250 kHz channel they leave a repeater enough
+  airtime headroom to hear, decode and re-transmit a frame before the next one
+  arrives — the Short presets are too fast for that and the Long presets too
+  slow.
+
+### Fixed
+
+- **The Columba logo no longer appears on the RNode's screen.** The wizard's
+  *Display Logo on RNode* toggle was removed earlier, but the framebuffer was
+  still populated whenever an interface carried the old `enable_framebuffer`
+  default, which left the logo latched on the panel — most visibly on an RNode
+  reached over IP, where nothing cleared it when the app disconnected. The
+  backend now disables the RNode's external framebuffer on every connect,
+  regardless of what a saved config says, so interfaces set up by an earlier
+  build are fixed on their next connect rather than needing to be re-added. The
+  logo asset itself is gone from both backends.
+
+---
+
 ## 1.2.1 — 2026-07-23
 
 ### Added

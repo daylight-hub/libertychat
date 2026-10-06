@@ -1095,26 +1095,24 @@ class ColumbaRNodeInterface(Interface):
         RNS.log(f"{self} Sent 64x64 image to RNode framebuffer", RNS.LOG_DEBUG)
 
     def _display_logo(self):
-        """Display or disable the Columba logo on RNode based on settings."""
-        if self.enable_framebuffer:
-            try:
-                from columba_logo import columba_fb_data
-                self.display_image(columba_fb_data)
-                # Delay before enable command to ensure framebuffer data is processed
-                time.sleep(0.05)
-                self.enable_external_framebuffer()
-                RNS.log(f"{self} Displayed Columba logo on RNode", RNS.LOG_DEBUG)
-            except ImportError:
-                RNS.log(f"{self} columba_logo module not found, skipping logo display", RNS.LOG_WARNING)
-            except Exception as e:  # noqa: BLE001
-                RNS.log(f"{self} Failed to display logo: {e}", RNS.LOG_WARNING)
-        else:
-            # Explicitly disable external framebuffer to restore normal RNode UI
-            try:
-                self.disable_external_framebuffer()
-                RNS.log(f"{self} Disabled external framebuffer on RNode", RNS.LOG_DEBUG)
-            except Exception as e:  # noqa: BLE001
-                RNS.log(f"{self} Failed to disable framebuffer: {e}", RNS.LOG_WARNING)
+        """LCS: hand the RNode's screen back to its own UI.
+
+        LCS ships no vendor logo to the RNode display. Upstream pushed the Columba
+        constellation into the external framebuffer whenever `enable_framebuffer`
+        was set, which left the logo latched on the panel — including on TCP/IP
+        RNodes, where it survived the app disconnecting because nothing cleared it.
+
+        The disable is unconditional rather than gated on `enable_framebuffer`:
+        interfaces configured by an older build still carry `enable_framebuffer =
+        yes` in their saved config, so honouring the flag would leave those RNodes
+        showing the logo forever. Sending the disable on every connect also clears
+        a panel that a previous build already latched.
+        """
+        try:
+            self.disable_external_framebuffer()
+            RNS.log(f"{self} Disabled external framebuffer on RNode", RNS.LOG_DEBUG)
+        except Exception as e:  # noqa: BLE001
+            RNS.log(f"{self} Failed to disable framebuffer: {e}", RNS.LOG_WARNING)
 
     def _read_loop(self):
         """Background thread for reading and parsing KISS frames."""

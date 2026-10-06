@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import network.libertychat.app.data.database.entity.InterfaceEntity
 import network.libertychat.app.data.model.TcpCommunityServers
 import network.libertychat.app.data.repository.IdentityRepository
 import network.libertychat.app.repository.InterfaceRepository
@@ -28,6 +29,8 @@ import network.libertychat.app.ui.screens.onboarding.OnboardingState
 import network.libertychat.app.util.BatteryOptimizationManager
 import network.libertychat.app.util.CrashReportManager
 import network.libertychat.app.util.getBlePermissions
+import org.json.JSONException
+import org.json.JSONObject
 import javax.inject.Inject
 
 /**
@@ -352,6 +355,16 @@ class OnboardingViewModel
             // Get existing interface entities (which include IDs)
             val existingEntities = interfaceRepository.allInterfaceEntities.first()
 
+            // LCS: the Command Center is stored as a "TCPClient" row, exactly like
+            // the LCS public node, so the type-keyed lookup below cannot tell them
+            // apart. Resolve it by host:port up front and hold it out of that loop
+            // — otherwise the "Internet (TCP)" card and the Command Center card
+            // both resolve to this single record and fight over its enabled flag,
+            // and ticking "Internet (TCP)" would silently create no interface at
+            // all because the loop would consider one to already exist.
+            val commandCenterEntity = findCommandCenterEntity(existingEntities)
+            val typeKeyedEntities = existingEntities.filterNot { it.id == commandCenterEntity?.id }
+
             // Map interface types to database type strings
             val typeMapping =
                 mapOf(
@@ -364,7 +377,7 @@ class OnboardingViewModel
             // Process each interface type
             for ((onboardingType, dbType) in typeMapping) {
                 val isSelected = selectedInterfaces.contains(onboardingType)
-                val existingEntity = existingEntities.find { it.type == dbType }
+                val existingEntity = typeKeyedEntities.find { it.type == dbType }
 
                 when {
                     // RNode requires wizard setup, don't auto-create or modify
@@ -415,6 +428,10 @@ class OnboardingViewModel
                                     }
                                 }
                                 OnboardingInterfaceType.RNODE -> null
+                                // LCS: handled after this loop — it shares the
+                                // "TCPClient" db type with TCP, so it cannot be
+                                // matched by type alone.
+                                OnboardingInterfaceType.COMMAND_CENTER -> null
                             }
                         config?.let {
                             try {
@@ -433,7 +450,84 @@ class OnboardingViewModel
                     }
                 }
             }
+
+            // LCS: handled outside the loop, keyed on host:port — see above.
+            if (!applyCommandCenter(commandCenterEntity, selectedInterfaces)) {
+                success = false
+            }
+
             return success
+        }
+
+        /**
+         * LCS: find the saved local Command Center interface, if it exists.
+         *
+         * Matched on `target_host`/`target_port` rather than on interface type, since
+         * the LCS public node is also stored as a `TCPClient` row.
+         */
+        private fun findCommandCenterEntity(entities: List<InterfaceEntity>): InterfaceEntity? {
+            val server = TcpCommunityServers.commandCenter
+            if (server == null) {
+                Log.w(TAG, "Command Center server entry missing from TcpCommunityServers")
+                return null
+            }
+            return entities.firstOrNull { entity ->
+                entity.type == "TCPClient" && entity.matchesTcpTarget(server.host, server.port)
+            }
+        }
+
+        /**
+         * LCS: create, enable or disable the local Command Center TCPClient interface.
+         *
+         * [existing] is the row [findCommandCenterEntity] resolved, or null if the
+         * interface has not been created yet. Returns false only if an insert failed;
+         * a missing-and-unselected interface is a no-op success.
+         */
+        private suspend fun applyCommandCenter(
+            existing: InterfaceEntity?,
+            selectedInterfaces: Set<OnboardingInterfaceType>,
+        ): Boolean {
+            val isSelected = selectedInterfaces.contains(OnboardingInterfaceType.COMMAND_CENTER)
+
+            return when {
+                existing != null -> {
+                    interfaceRepository.toggleInterfaceEnabled(existing.id, isSelected)
+                    Log.d(TAG, "Command Center ${if (isSelected) "enabled" else "disabled"}")
+                    true
+                }
+
+                isSelected -> {
+                    val server = TcpCommunityServers.commandCenter
+                    if (server == null) {
+                        return true
+                    }
+                    val config =
+                        InterfaceConfig.TCPClient(
+                            name = server.name,
+                            enabled = true,
+                            targetHost = server.host,
+                            targetPort = server.port,
+                            // Carried through from the server entry, which is never a
+                            // bootstrap node: a bootstrap link auto-detaches once enough
+                            // discovered interfaces are up, and dropping the user's own
+                            // Command Center is exactly the wrong behaviour.
+                            bootstrapOnly = server.isBootstrap,
+                        )
+                    try {
+                        interfaceRepository.insertInterface(config)
+                        Log.d(TAG, "Created interface: ${config.name}")
+                        true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to create interface: ${config.name}", e)
+                        false
+                    }
+                }
+
+                else -> {
+                    Log.d(TAG, "Command Center not selected and doesn't exist, skipping")
+                    true
+                }
+            }
         }
 
         /**
@@ -515,4 +609,24 @@ class OnboardingViewModel
         // Legacy method for backwards compatibility with old WelcomeScreen
         @Deprecated("Use updateDisplayName instead", ReplaceWith("updateDisplayName(name)"))
         fun updateDisplayNameInput(name: String) = updateDisplayName(name)
+    }
+
+/**
+ * LCS: true when this interface row is a TCP client already pointed at [host]:[port].
+ *
+ * Used to tell the Command Center entry apart from the LCS public node, since both
+ * are stored with type `"TCPClient"`. Malformed or absent config JSON reads as "not
+ * a match", so a bad row causes a duplicate insert rather than an onboarding crash.
+ */
+private fun InterfaceEntity.matchesTcpTarget(
+    host: String,
+    port: Int,
+): Boolean =
+    try {
+        val json = JSONObject(configJson)
+        json.optString("target_host").equals(host, ignoreCase = true) &&
+            json.optInt("target_port", -1) == port
+    } catch (e: JSONException) {
+        Log.w("OnboardingViewModel", "Unparseable interface config JSON on row $id", e)
+        false
     }

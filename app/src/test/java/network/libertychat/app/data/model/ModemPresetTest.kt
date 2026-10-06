@@ -197,4 +197,32 @@ class ModemPresetTest {
             }
         }
     }
+
+    // ========== LCS: Badge Tests ==========
+
+    @Test
+    fun `medium presets are badged for repeater use`() {
+        assertEquals("Works well with repeaters", ModemPreset.MEDIUM_FAST.lcsBadge)
+        assertEquals("Works well with repeaters", ModemPreset.MEDIUM_SLOW.lcsBadge)
+    }
+
+    @Test
+    fun `long fast keeps the default badge and short fast the voice badge`() {
+        // Adding the repeater badges must not displace the two that already ship.
+        assertEquals("Default", ModemPreset.LONG_FAST.lcsBadge)
+        assertEquals("Best for voice over LoRa", ModemPreset.SHORT_FAST.lcsBadge)
+    }
+
+    @Test
+    fun `presets without a badge report null rather than an empty string`() {
+        // The UI renders the chip on a null check, so an empty string would draw
+        // an empty chip rather than no chip.
+        ModemPreset.entries.forEach { preset ->
+            preset.lcsBadge?.let { badge ->
+                assert(badge.isNotBlank()) { "${preset.name} has a blank badge" }
+            }
+        }
+        assertNull(ModemPreset.LONG_SLOW.lcsBadge)
+        assertNull(ModemPreset.SHORT_TURBO.lcsBadge)
+    }
 }

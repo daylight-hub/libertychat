@@ -200,8 +200,9 @@ data class RNodeWizardState(
     // to participate fully in transport rather than sit at the network edge.
     val interfaceMode: String = "full",
     val showAdvancedSettings: Boolean = false,
-    // Display logo on RNode screen
-    val enableFramebuffer: Boolean = true,
+    // LCS: no vendor logo on the RNode screen. The toggle that set this is gone
+    // from the wizard, and the backend disables the framebuffer on every connect.
+    val enableFramebuffer: Boolean = false,
     // IFAC (Interface Access Code) authentication
     val networkName: String = "",
     val passphrase: String = "",

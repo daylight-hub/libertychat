@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Wifi
@@ -113,6 +114,17 @@ fun ConnectivityPage(
                     else -> null
                 },
             statusIsError = blePermissionsDenied,
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // LCS: local Command Center over TCP — the fallback when AutoInterface's
+        // multicast discovery doesn't survive the user's router.
+        InterfaceCard(
+            interfaceType = OnboardingInterfaceType.COMMAND_CENTER,
+            isSelected = selectedInterfaces.contains(OnboardingInterfaceType.COMMAND_CENTER),
+            onClick = { onInterfaceToggle(OnboardingInterfaceType.COMMAND_CENTER) },
+            icon = Icons.Default.Dns,
         )
 
         Spacer(modifier = Modifier.height(12.dp))

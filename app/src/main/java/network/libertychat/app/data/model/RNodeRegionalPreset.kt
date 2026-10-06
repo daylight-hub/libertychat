@@ -104,11 +104,17 @@ enum class ModemPreset(
     /**
      * LCS: badge text shown beside the preset name, or null for no badge.
      *
-     * Two presets carry one. [LONG_FAST] is the general-purpose LCS default.
-     * [SHORT_FAST] is the one fast enough for realtime voice: at SF7/BW250/CR5
-     * the raw link is ~10.9 kbps, against ~1.07 kbps for Long Fast. Codec2 3200
-     * needs ~3.2 kbps of payload plus RNS framing, so Long Fast cannot carry a
+     * [LONG_FAST] is the general-purpose LCS default. [SHORT_FAST] is the one
+     * fast enough for realtime voice: at SF7/BW250/CR5 the raw link is
+     * ~10.9 kbps, against ~1.07 kbps for Long Fast. Codec2 3200 needs
+     * ~3.2 kbps of payload plus RNS framing, so Long Fast cannot carry a
      * live call at all — it is a messaging preset.
+     *
+     * [MEDIUM_FAST] and [MEDIUM_SLOW] are badged for repeater use: at SF9–10
+     * on a 250 kHz channel they keep enough airtime headroom for a repeater to
+     * hear, decode and re-transmit a frame without colliding with the next
+     * one, which the Short presets are too fast for and the Long presets too
+     * slow for.
      */
     val lcsBadge: String? = null,
 ) {
@@ -140,6 +146,7 @@ enum class ModemPreset(
         bandwidth = 250000,
         codingRate = 5,
         description = "Balanced speed and range",
+        lcsBadge = "Works well with repeaters",
     ),
     MEDIUM_SLOW(
         displayName = "Medium Slow",
@@ -147,6 +154,7 @@ enum class ModemPreset(
         bandwidth = 250000,
         codingRate = 5,
         description = "Slower speed, medium range",
+        lcsBadge = "Works well with repeaters",
     ),
     LONG_RANGE_TURBO(
         displayName = "Long Range / Turbo",

@@ -334,7 +334,11 @@ sealed class InterfaceConfig : Parcelable {
      * @param mode Interface mode: "full", "gateway", "access_point", "roaming", "boundary"
      * @param networkName Optional IFAC network name for cryptographic authentication
      * @param passphrase Optional IFAC passphrase for cryptographic authentication
-     * @param enableFramebuffer Display Columba logo on RNode's screen
+     * @param enableFramebuffer LCS: retained for config compatibility, but always
+     *        false on new interfaces — LCS pushes no vendor logo to the RNode
+     *        screen. The backend disables the external framebuffer on every
+     *        connect regardless of this flag, so rows saved by an older build
+     *        (which defaulted it to true) no longer latch a logo on the panel.
      */
     data class RNode(
         override val name: String = "RNode LoRa",
@@ -358,7 +362,8 @@ sealed class InterfaceConfig : Parcelable {
         val mode: String = "access_point",
         val networkName: String? = null,
         val passphrase: String? = null,
-        val enableFramebuffer: Boolean = true, // Display logo on RNode screen
+        // LCS: no vendor logo on the RNode screen (was true upstream)
+        val enableFramebuffer: Boolean = false,
         override val networkRestriction: NetworkRestriction = NetworkRestriction.ANY,
     ) : InterfaceConfig() {
         override val typeName: String get() = "RNode"

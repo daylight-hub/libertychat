@@ -153,7 +153,7 @@ class ConnectivityPageTest {
     }
 
     @Test
-    fun interfaceOptions_allFourOptionsDisplayed() {
+    fun interfaceOptions_allFiveOptionsDisplayed() {
         // Given/When
         composeTestRule.setContent {
             ConnectivityPage(
@@ -166,11 +166,38 @@ class ConnectivityPageTest {
             )
         }
 
-        // Then - verify all four interface types are visible (with scrolling for bottom items)
+        // Then - verify all five interface types are visible (with scrolling for bottom items)
         composeTestRule.onNodeWithText("Local WiFi").assertIsDisplayed()
         composeTestRule.onNodeWithText("Bluetooth LE").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Command Center PRO").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Internet (TCP)").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("LoRa Radio").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun interfaceOptions_commandCenterShowsHostAndFallbackHint() {
+        // Given/When
+        composeTestRule.setContent {
+            ConnectivityPage(
+                selectedInterfaces = emptySet(),
+                onInterfaceToggle = {},
+                blePermissionsGranted = false,
+                blePermissionsDenied = false,
+                onBack = {},
+                onContinue = {},
+            )
+        }
+
+        // Then - LCS: the card has to name the host it will use and say when to
+        // reach for it, since it is the fallback for AutoInterface not working.
+        composeTestRule
+            .onNodeWithText("Connect to a Command Center over your network")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText("liberty.local:4246 · Use if Local WiFi can't find it")
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     // ========== Interface Descriptions Tests ==========
@@ -439,7 +466,7 @@ class ConnectivityPageTest {
 
         // Then - find the checkbox associated with WiFi card
         // The checkbox within the card with "Local WiFi" text should be checked
-        composeTestRule.onAllNodes(isToggleable())[0].assertIsOn()
+        composeTestRule.onAllNodes(isToggleable())[CARD_AUTO].assertIsOn()
     }
 
     @Test
@@ -457,7 +484,7 @@ class ConnectivityPageTest {
         }
 
         // Then
-        composeTestRule.onAllNodes(isToggleable())[1].assertIsOn()
+        composeTestRule.onAllNodes(isToggleable())[CARD_BLE].assertIsOn()
     }
 
     @Test
@@ -475,7 +502,7 @@ class ConnectivityPageTest {
         }
 
         // Then
-        composeTestRule.onAllNodes(isToggleable())[2].assertIsOn()
+        composeTestRule.onAllNodes(isToggleable())[CARD_TCP].assertIsOn()
     }
 
     @Test
@@ -493,7 +520,7 @@ class ConnectivityPageTest {
         }
 
         // Then
-        composeTestRule.onAllNodes(isToggleable())[3].assertIsOn()
+        composeTestRule.onAllNodes(isToggleable())[CARD_RNODE].assertIsOn()
     }
 
     @Test
@@ -510,11 +537,12 @@ class ConnectivityPageTest {
             )
         }
 
-        // Then - all four checkboxes should be unchecked
-        composeTestRule.onAllNodes(isToggleable())[0].assertIsOff()
-        composeTestRule.onAllNodes(isToggleable())[1].assertIsOff()
-        composeTestRule.onAllNodes(isToggleable())[2].assertIsOff()
-        composeTestRule.onAllNodes(isToggleable())[3].assertIsOff()
+        // Then - all five checkboxes should be unchecked
+        composeTestRule.onAllNodes(isToggleable())[CARD_AUTO].assertIsOff()
+        composeTestRule.onAllNodes(isToggleable())[CARD_BLE].assertIsOff()
+        composeTestRule.onAllNodes(isToggleable())[CARD_COMMAND_CENTER].assertIsOff()
+        composeTestRule.onAllNodes(isToggleable())[CARD_TCP].assertIsOff()
+        composeTestRule.onAllNodes(isToggleable())[CARD_RNODE].assertIsOff()
     }
 
     @Test
@@ -536,11 +564,12 @@ class ConnectivityPageTest {
             )
         }
 
-        // Then - first three should be checked, last unchecked
-        composeTestRule.onAllNodes(isToggleable())[0].assertIsOn()
-        composeTestRule.onAllNodes(isToggleable())[1].assertIsOn()
-        composeTestRule.onAllNodes(isToggleable())[2].assertIsOn()
-        composeTestRule.onAllNodes(isToggleable())[3].assertIsOff()
+        // Then - only the three selected types are checked
+        composeTestRule.onAllNodes(isToggleable())[CARD_AUTO].assertIsOn()
+        composeTestRule.onAllNodes(isToggleable())[CARD_BLE].assertIsOn()
+        composeTestRule.onAllNodes(isToggleable())[CARD_TCP].assertIsOn()
+        composeTestRule.onAllNodes(isToggleable())[CARD_COMMAND_CENTER].assertIsOff()
+        composeTestRule.onAllNodes(isToggleable())[CARD_RNODE].assertIsOff()
     }
 
     // ========== Navigation Button Tests ==========
@@ -750,12 +779,7 @@ class ConnectivityPageTest {
         composeTestRule.setContent {
             ConnectivityPage(
                 selectedInterfaces =
-                    setOf(
-                        OnboardingInterfaceType.AUTO,
-                        OnboardingInterfaceType.BLE,
-                        OnboardingInterfaceType.TCP,
-                        OnboardingInterfaceType.RNODE,
-                    ),
+                    OnboardingInterfaceType.entries.toSet(),
                 onInterfaceToggle = {},
                 blePermissionsGranted = true,
                 blePermissionsDenied = false,
@@ -764,11 +788,12 @@ class ConnectivityPageTest {
             )
         }
 
-        // Then - all checkboxes should be on
-        composeTestRule.onAllNodes(isToggleable())[0].assertIsOn()
-        composeTestRule.onAllNodes(isToggleable())[1].assertIsOn()
-        composeTestRule.onAllNodes(isToggleable())[2].assertIsOn()
-        composeTestRule.onAllNodes(isToggleable())[3].assertIsOn()
+        // Then - every card should be on
+        composeTestRule.onAllNodes(isToggleable())[CARD_AUTO].assertIsOn()
+        composeTestRule.onAllNodes(isToggleable())[CARD_BLE].assertIsOn()
+        composeTestRule.onAllNodes(isToggleable())[CARD_COMMAND_CENTER].assertIsOn()
+        composeTestRule.onAllNodes(isToggleable())[CARD_TCP].assertIsOn()
+        composeTestRule.onAllNodes(isToggleable())[CARD_RNODE].assertIsOn()
     }
 
     @Test
@@ -806,7 +831,7 @@ class ConnectivityPageTest {
         }
 
         // When - clicking the checkbox directly
-        composeTestRule.onAllNodes(isToggleable())[0].performClick()
+        composeTestRule.onAllNodes(isToggleable())[CARD_AUTO].performClick()
 
         // Then
         assertEquals(OnboardingInterfaceType.AUTO, toggledInterface)
@@ -831,14 +856,28 @@ class ConnectivityPageTest {
         // When - click each interface in order (with scrolling for bottom items)
         composeTestRule.onNodeWithText("Local WiFi").performClick()
         composeTestRule.onNodeWithText("Bluetooth LE").performClick()
+        composeTestRule.onNodeWithText("Command Center PRO").performScrollTo().performClick()
         composeTestRule.onNodeWithText("Internet (TCP)").performScrollTo().performClick()
         composeTestRule.onNodeWithText("LoRa Radio").performScrollTo().performClick()
 
         // Then
-        assertEquals(4, toggledInterfaces.size)
+        assertEquals(5, toggledInterfaces.size)
         assertEquals(OnboardingInterfaceType.AUTO, toggledInterfaces[0])
         assertEquals(OnboardingInterfaceType.BLE, toggledInterfaces[1])
-        assertEquals(OnboardingInterfaceType.TCP, toggledInterfaces[2])
-        assertEquals(OnboardingInterfaceType.RNODE, toggledInterfaces[3])
+        assertEquals(OnboardingInterfaceType.COMMAND_CENTER, toggledInterfaces[2])
+        assertEquals(OnboardingInterfaceType.TCP, toggledInterfaces[3])
+        assertEquals(OnboardingInterfaceType.RNODE, toggledInterfaces[4])
     }
 }
+
+/**
+ * LCS: positions of the interface cards on the page, in render order. The
+ * `isToggleable()` lookups below are positional, so naming them keeps the tests
+ * readable and makes an inserted card a one-line change here rather than a
+ * renumbering exercise across the file.
+ */
+private const val CARD_AUTO = 0
+private const val CARD_BLE = 1
+private const val CARD_COMMAND_CENTER = 2
+private const val CARD_TCP = 3
+private const val CARD_RNODE = 4

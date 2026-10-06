@@ -21,9 +21,12 @@ import java.io.OutputStream
  * Plan deviation #8 vs the A.8 handoff: the handoff suggested either
  * (a) leaving `RNodeConnectionHelper` in `:reticulum/protocol/` or
  * (b) defining a `UsbWriteBridge` interface. This impl picks (b) but
- * generalizes the bridge to cover the USB + BLE openers AND the optional
- * RNode framebuffer image so the surface in `:rns-host` is a single
- * adapter rather than three.
+ * generalizes the bridge to cover both the USB and BLE openers, so the
+ * surface in `:rns-host` is a single adapter rather than two.
+ *
+ * LCS: a third member, `rnodeFramebufferData()`, used to supply the Columba
+ * logo for the RNode's OLED panel. LCS ships no vendor logo to the RNode
+ * screen, so the member and its asset are gone.
  */
 interface RNodeHostBridge {
     /**
@@ -54,13 +57,6 @@ interface RNodeHostBridge {
         ctx: Context,
         address: String,
     ): Pair<InputStream, OutputStream>
-
-    /**
-     * Optional RNode framebuffer image data (typically the Columba logo).
-     * Returned as a flat byte array sized for the RNode's small OLED panel.
-     * Null disables the framebuffer feature for this connection.
-     */
-    fun rnodeFramebufferData(): ByteArray?
 }
 
 /**

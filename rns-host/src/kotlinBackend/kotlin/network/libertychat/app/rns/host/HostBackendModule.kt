@@ -14,7 +14,6 @@ import network.libertychat.app.rns.backend.kt.CallPrivacyBridge
 import network.libertychat.app.rns.backend.kt.NativeRnsBackend
 import network.libertychat.app.rns.backend.kt.RNodeHostBridge
 import network.libertychat.app.rns.host.call.rnode.BluetoothLeConnection
-import network.libertychat.app.rns.host.call.rnode.ColumbaLogo
 import network.libertychat.app.rns.host.di.LocalBackend
 import network.libertychat.app.rns.host.persistence.CallsFromContactsGate
 import network.libertychat.app.rns.host.persistence.ServiceSettingsAccessor
@@ -149,6 +148,4 @@ internal class AndroidRNodeHostBridge(
         val bleConn = BluetoothLeConnection(ctx, address)
         return bleConn.connect()
     }
-
-    override fun rnodeFramebufferData(): ByteArray = ColumbaLogo.FB_DATA
 }

@@ -1,6 +1,7 @@
 package network.libertychat.app.ui.screens.tcpclient
 
 import android.app.Application
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -81,6 +82,52 @@ class ServerSelectionStepTest {
         composeTestRule
             .onNodeWithText("Select a community server or enter custom connection details.")
             .assertIsDisplayed()
+    }
+
+    // ========== LCS: Server Note Tests ==========
+
+    @Test
+    fun serverSelectionStep_displaysNoteForServerThatHasOne() {
+        // Given
+        val mockViewModel = mockk<TcpClientWizardViewModel>()
+        every { mockViewModel.state } returns
+            MutableStateFlow(
+                TcpClientWizardTestFixtures.serverSelectionState(),
+            )
+        every { mockViewModel.getCommunityServers() } returns
+            TcpClientWizardTestFixtures.testServersWithNote
+
+        // When
+        composeTestRule.setContent {
+            ServerSelectionStep(viewModel = mockViewModel)
+        }
+
+        // Then
+        composeTestRule
+            .onNodeWithText("Use this one when the other is unreachable")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun serverSelectionStep_omitsNoteForServerWithoutOne() {
+        // Given - neither fixture server carries a note
+        val mockViewModel = mockk<TcpClientWizardViewModel>()
+        every { mockViewModel.state } returns
+            MutableStateFlow(
+                TcpClientWizardTestFixtures.serverSelectionState(),
+            )
+        every { mockViewModel.getCommunityServers() } returns TcpClientWizardTestFixtures.testServers
+
+        // When
+        composeTestRule.setContent {
+            ServerSelectionStep(viewModel = mockViewModel)
+        }
+
+        // Then - the cards still render, with no stray note text
+        composeTestRule.onNodeWithText("Test Server").assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText("Use this one when the other is unreachable")
+            .assertDoesNotExist()
     }
 
     // ========== Server List Tests ==========

@@ -120,13 +120,29 @@ class OnboardingViewModelTest {
         type: String,
         name: String,
         enabled: Boolean = true,
+        configJson: String = "{}",
     ) = InterfaceEntity(
         id = id,
         name = name,
         type = type,
         enabled = enabled,
-        configJson = "{}",
+        configJson = configJson,
         displayOrder = id.toInt(),
+    )
+
+    /** LCS: a saved TCPClient row pointed at [host]:[port], as the DB stores it. */
+    private fun createTcpEntity(
+        id: Long,
+        name: String,
+        host: String,
+        port: Int,
+        enabled: Boolean = true,
+    ) = createInterfaceEntity(
+        id = id,
+        type = "TCPClient",
+        name = name,
+        enabled = enabled,
+        configJson = """{"target_host":"$host","target_port":$port,"kiss_framing":false,"mode":"full"}""",
     )
 
     // ========== Initial State Tests ==========
@@ -677,6 +693,228 @@ class OnboardingViewModelTest {
             coVerify { mockInterfaceRepository.insertInterface(match { it is InterfaceConfig.AndroidBLE }) }
             // - TCP doesn't exist -> create
             coVerify { mockInterfaceRepository.insertInterface(match { it is InterfaceConfig.TCPClient }) }
+        }
+
+    // ========== LCS: Command Center PRO Tests ==========
+
+    @Test
+    fun `completeOnboarding creates Command Center interface pointed at liberty local`() =
+        runTest {
+            // Given: No interfaces exist
+            every { mockInterfaceRepository.allInterfaceEntities } returns MutableStateFlow(emptyList())
+            coEvery { mockIdentityRepository.getActiveIdentitySync() } returns null
+            coEvery { mockInterfaceRepository.insertInterface(any()) } returns 1L
+
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+
+            // When: User selects Command Center PRO
+            viewModel.toggleInterface(OnboardingInterfaceType.COMMAND_CENTER)
+            advanceUntilIdle()
+
+            var callbackCalled = false
+            viewModel.completeOnboarding { callbackCalled = true }
+            advanceUntilIdle()
+
+            // Then: a TCPClient aimed at the Command Center, never as a bootstrap
+            // interface — bootstrap links auto-detach once other interfaces are up,
+            // which would drop the user's own Command Center.
+            coVerify {
+                mockInterfaceRepository.insertInterface(
+                    match {
+                        it is InterfaceConfig.TCPClient &&
+                            it.targetHost == "liberty.local" &&
+                            it.targetPort == 4246 &&
+                            it.enabled &&
+                            !it.bootstrapOnly
+                    },
+                )
+            }
+            assertTrue("Callback should be called on completion", callbackCalled)
+        }
+
+    @Test
+    fun `completeOnboarding does not create Command Center when not selected`() =
+        runTest {
+            // Given: No interfaces exist
+            every { mockInterfaceRepository.allInterfaceEntities } returns MutableStateFlow(emptyList())
+            coEvery { mockIdentityRepository.getActiveIdentitySync() } returns null
+            coEvery { mockInterfaceRepository.insertInterface(any()) } returns 1L
+
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+
+            // When: only the default AUTO selection is active
+            var callbackCalled = false
+            viewModel.completeOnboarding { callbackCalled = true }
+            advanceUntilIdle()
+
+            // Then
+            coVerify(exactly = 0) {
+                mockInterfaceRepository.insertInterface(
+                    match { it is InterfaceConfig.TCPClient && it.targetHost == "liberty.local" },
+                )
+            }
+            assertTrue("Callback should be called on completion", callbackCalled)
+        }
+
+    @Test
+    fun `completeOnboarding enables an existing Command Center row instead of duplicating it`() =
+        runTest {
+            // Given: the Command Center interface already exists but is disabled
+            val existing =
+                createTcpEntity(
+                    id = 7,
+                    name = "Command Center PRO Client",
+                    host = "liberty.local",
+                    port = 4246,
+                    enabled = false,
+                )
+            every { mockInterfaceRepository.allInterfaceEntities } returns MutableStateFlow(listOf(existing))
+            coEvery { mockIdentityRepository.getActiveIdentitySync() } returns null
+            coEvery { mockInterfaceRepository.insertInterface(any()) } returns 1L
+
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+
+            // When
+            viewModel.toggleInterface(OnboardingInterfaceType.COMMAND_CENTER)
+            advanceUntilIdle()
+            var callbackCalled = false
+            viewModel.completeOnboarding { callbackCalled = true }
+            advanceUntilIdle()
+
+            // Then: re-enabled in place, not inserted a second time
+            coVerify { mockInterfaceRepository.toggleInterfaceEnabled(7, true) }
+            coVerify(exactly = 0) {
+                mockInterfaceRepository.insertInterface(
+                    match { it is InterfaceConfig.TCPClient && it.targetHost == "liberty.local" },
+                )
+            }
+            // Touched exactly once: the type-keyed pass must not also claim this row
+            // as "the TCPClient interface" and toggle it a second time.
+            coVerify(exactly = 1) { mockInterfaceRepository.toggleInterfaceEnabled(7, any()) }
+            assertTrue("Callback should be called on completion", callbackCalled)
+        }
+
+    @Test
+    fun `completeOnboarding keeps Command Center separate from the public node row`() =
+        runTest {
+            // Given: the LCS public node is already saved. It is also a "TCPClient"
+            // row, so matching by interface type alone would make these two fight
+            // over the same record — this is the regression this test pins down.
+            val publicNode =
+                createTcpEntity(
+                    id = 3,
+                    name = "LCS Public Node",
+                    host = "public.lcs.network",
+                    port = 4245,
+                    enabled = false,
+                )
+            every { mockInterfaceRepository.allInterfaceEntities } returns MutableStateFlow(listOf(publicNode))
+            coEvery { mockIdentityRepository.getActiveIdentitySync() } returns null
+            coEvery { mockInterfaceRepository.insertInterface(any()) } returns 9L
+
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+
+            // When: the user wants both the public node and the Command Center
+            viewModel.toggleInterface(OnboardingInterfaceType.TCP)
+            viewModel.toggleInterface(OnboardingInterfaceType.COMMAND_CENTER)
+            advanceUntilIdle()
+            var callbackCalled = false
+            viewModel.completeOnboarding { callbackCalled = true }
+            advanceUntilIdle()
+
+            // Then: the existing public-node row is re-enabled...
+            coVerify { mockInterfaceRepository.toggleInterfaceEnabled(3, true) }
+            // ...and the Command Center is added alongside it rather than
+            // overwriting it or being skipped as "already present".
+            coVerify(exactly = 1) {
+                mockInterfaceRepository.insertInterface(
+                    match {
+                        it is InterfaceConfig.TCPClient &&
+                            it.targetHost == "liberty.local" &&
+                            it.targetPort == 4246
+                    },
+                )
+            }
+            assertTrue("Callback should be called on completion", callbackCalled)
+        }
+
+    @Test
+    fun `completeOnboarding disables an existing Command Center row when deselected`() =
+        runTest {
+            // Given: the Command Center exists and is enabled
+            val existing =
+                createTcpEntity(
+                    id = 11,
+                    name = "Command Center PRO Client",
+                    host = "liberty.local",
+                    port = 4246,
+                    enabled = true,
+                )
+            every { mockInterfaceRepository.allInterfaceEntities } returns MutableStateFlow(listOf(existing))
+            coEvery { mockIdentityRepository.getActiveIdentitySync() } returns null
+            coEvery { mockInterfaceRepository.insertInterface(any()) } returns 1L
+
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+
+            // When: the user leaves Command Center unchecked
+            var callbackCalled = false
+            viewModel.completeOnboarding { callbackCalled = true }
+            advanceUntilIdle()
+
+            // Then: disabled exactly once. Before the host:port split, the
+            // type-keyed pass disabled this row too and the count was 2.
+            coVerify(exactly = 1) { mockInterfaceRepository.toggleInterfaceEnabled(11, false) }
+            assertTrue("Callback should be called on completion", callbackCalled)
+        }
+
+    @Test
+    fun `completeOnboarding still creates the public node when only a Command Center row exists`() =
+        runTest {
+            // Given: the Command Center is the only saved TCPClient row. This is the
+            // ordinary case, not a corner one — InterfaceDatabase.onOpen deletes rows
+            // named "LCS Public Node" on every database open.
+            val commandCenter =
+                createTcpEntity(
+                    id = 5,
+                    name = "Command Center PRO Client",
+                    host = "liberty.local",
+                    port = 4246,
+                    enabled = true,
+                )
+            every { mockInterfaceRepository.allInterfaceEntities } returns MutableStateFlow(listOf(commandCenter))
+            coEvery { mockIdentityRepository.getActiveIdentitySync() } returns null
+            coEvery { mockInterfaceRepository.insertInterface(any()) } returns 6L
+
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+
+            // When: the user ticks only "Internet (TCP)"
+            viewModel.toggleInterface(OnboardingInterfaceType.TCP)
+            advanceUntilIdle()
+            var callbackCalled = false
+            viewModel.completeOnboarding { callbackCalled = true }
+            advanceUntilIdle()
+
+            // Then: the public node is created. Matching saved interfaces by type
+            // alone used to find the Command Center row here, conclude a TCPClient
+            // already existed, and create nothing — so ticking "Internet (TCP)"
+            // produced no internet interface at all.
+            coVerify {
+                mockInterfaceRepository.insertInterface(
+                    match {
+                        it is InterfaceConfig.TCPClient && it.targetHost == "public.lcs.network"
+                    },
+                )
+            }
+            // ...and the Command Center row is left alone, since it was not ticked
+            // and was already disabled-or-enabled on its own terms.
+            coVerify(exactly = 1) { mockInterfaceRepository.toggleInterfaceEnabled(5, false) }
+            assertTrue("Callback should be called on completion", callbackCalled)
         }
 
     // ========== Skip Onboarding Tests ==========

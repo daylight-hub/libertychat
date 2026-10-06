@@ -22,7 +22,18 @@ object TcpClientWizardTestFixtures {
             port = 5000,
         )
 
+    /** LCS: a server carrying the optional picker note, to cover that rendering path. */
+    val notedTestServer =
+        TcpCommunityServer(
+            name = "Noted Server",
+            host = "noted.example.com",
+            port = 4246,
+            note = "Use this one when the other is unreachable",
+        )
+
     val testServers = listOf(testServer, anotherTestServer)
+
+    val testServersWithNote = listOf(testServer, notedTestServer)
 
     // Convenience methods for common state configurations
     fun serverSelectionState(
