@@ -502,13 +502,29 @@ class RNodeWizardViewModelTest {
         }
 
     @Test
-    fun `default modem preset is LONG_FAST`() =
+    fun `default modem preset is MEDIUM_FAST`() =
         runViewModelTest {
             advanceUntilIdle()
 
             viewModel.state.test {
                 val state = awaitItem()
-                assertEquals(ModemPreset.LONG_FAST, state.selectedModemPreset)
+                // LCS: Medium Fast, for rooftop-repeater deployments.
+                assertEquals(ModemPreset.MEDIUM_FAST, state.selectedModemPreset)
+            }
+        }
+
+    @Test
+    fun `initial LoRa fields match the default modem preset`() =
+        runViewModelTest {
+            advanceUntilIdle()
+
+            viewModel.state.test {
+                val state = awaitItem()
+                // The review step shows these before the picker is touched, so they
+                // have to agree with ModemPreset.DEFAULT.
+                assertEquals(ModemPreset.DEFAULT.bandwidth.toString(), state.bandwidth)
+                assertEquals(ModemPreset.DEFAULT.spreadingFactor.toString(), state.spreadingFactor)
+                assertEquals(ModemPreset.DEFAULT.codingRate.toString(), state.codingRate)
             }
         }
 
@@ -530,7 +546,7 @@ class RNodeWizardViewModelTest {
             viewModel.selectFrequencyRegion(usRegion)
             advanceUntilIdle()
 
-            // Default modem preset is LONG_FAST (250kHz bandwidth)
+            // Default modem preset is MEDIUM_FAST (also 250kHz bandwidth)
             // US band: (928-902) / 0.25 = 104 slots
             assertEquals(104, viewModel.getNumSlots())
         }

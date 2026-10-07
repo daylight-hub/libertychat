@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +36,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AltRoute
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
@@ -798,6 +800,8 @@ private fun ReactionChip(
  * @param onSelectText Optional callback to open a selectable-text view (text messages only)
  * @param onViewDetails Optional callback for viewing message details (all messages)
  * @param onRetry Optional callback for retrying failed messages
+ * @param onRequestPath LCS: optional callback to request a network path to this
+ *        message's peer (shown for every message)
  * @param onDismiss Callback when the overlay is dismissed
  * @param modifier Optional modifier for the overlay
  */
@@ -820,6 +824,8 @@ fun ReactionModeOverlay(
     onViewDetails: (() -> Unit)? = null,
     onRetry: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
+    /** LCS: called when the user asks for a path request to this message's peer. */
+    onRequestPath: (() -> Unit)? = null,
     /** Called when dismiss animation starts */
     onDismissStarted: () -> Unit = {},
     /** Called when dismiss animation completes */
@@ -959,6 +965,16 @@ fun ReactionModeOverlay(
             }
         }
 
+    // LCS: dismiss like Retry does. The request is fire-and-forget and its result
+    // arrives as a Toast, which would be hidden behind the overlay if it stayed up.
+    val wrappedOnRequestPath: (() -> Unit)? =
+        onRequestPath?.let {
+            {
+                it()
+                handleDismiss()
+            }
+        }
+
     AnimatedVisibility(
         visible = visible,
         enter =
@@ -1075,6 +1091,7 @@ fun ReactionModeOverlay(
                         onViewDetails = wrappedOnViewDetails,
                         onRetry = wrappedOnRetry,
                         onDelete = wrappedOnDelete,
+                        onRequestPath = wrappedOnRequestPath,
                         modifier =
                             Modifier
                                 .align(if (isFromMe) Alignment.TopEnd else Alignment.TopStart)
@@ -1158,6 +1175,7 @@ fun SelectableTextDialog(
  * @param onViewDetails Optional callback for view details (shown for sent messages)
  * @param onRetry Optional callback for retry (shown for failed messages)
  * @param onDelete Optional callback for delete action
+ * @param onRequestPath LCS: optional callback to request a network path to the peer
  * @param modifier Optional modifier for the buttons container
  */
 @Composable
@@ -1168,6 +1186,7 @@ private fun MessageActionButtons(
     onViewDetails: (() -> Unit)?,
     onRetry: (() -> Unit)?,
     onDelete: (() -> Unit)? = null,
+    onRequestPath: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -1178,7 +1197,15 @@ private fun MessageActionButtons(
         shadowElevation = 8.dp,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            // LCS: scrollable because the row can now exceed a narrow phone's width.
+            // Seven 48.dp buttons plus padding and spacing comes to ~408.dp, against
+            // 360.dp of screen on a compact device, and the row is aligned to one
+            // edge inside a fillMaxWidth parent — so without this the far end
+            // (Delete, or Retry on a from-me message) is simply unreachable.
+            modifier =
+                Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1220,6 +1247,16 @@ private fun MessageActionButtons(
                     icon = Icons.Default.Info,
                     label = "Details",
                     onClick = onViewDetails,
+                )
+            }
+
+            // LCS: Request path. Sits before Delete so the destructive action stays
+            // last, and after Details so the common actions keep their positions.
+            if (onRequestPath != null) {
+                ReactionModeActionButton(
+                    icon = Icons.Default.AltRoute,
+                    label = "Request path",
+                    onClick = onRequestPath,
                 )
             }
 

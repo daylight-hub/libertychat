@@ -144,7 +144,7 @@ private fun ModemPresetCard(
 
                     // LCS: badge text now lives on the preset itself, so the
                     // voice/PTT recommendation can sit on Short Fast while the
-                    // general recommendation stays on Long Fast.
+                    // general recommendation sits on Medium Fast (the default).
                     preset.lcsBadge?.let { badge ->
                         Spacer(Modifier.width(8.dp))
                         SuggestionChip(

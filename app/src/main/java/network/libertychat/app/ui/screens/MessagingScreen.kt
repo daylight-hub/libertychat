@@ -588,6 +588,13 @@ fun MessagingScreen(
         }
     }
 
+    // LCS: result of the "Request path" message action.
+    LaunchedEffect(viewModel) {
+        viewModel.pathRequestMessage.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
     // Compose-level clock for refreshing relative timestamps ("Just now" → "5 min ago").
     // Reading this state in the item composable triggers recomposition of visible items only —
     // unlike the old _messagesRefreshTrigger / viewModel.refreshTimestamps() approach, this
@@ -1854,6 +1861,7 @@ fun MessagingScreen(
                             null
                         },
                     onDelete = { showDeleteConfirmation = true },
+                    onRequestPath = { viewModel.requestPathForMessage(state.messageId) },
                     onDismissStarted = {
                         // Show original message immediately when dismiss animation starts
                         viewModel.showOriginalMessage()

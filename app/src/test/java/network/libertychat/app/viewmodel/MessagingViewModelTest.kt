@@ -252,6 +252,10 @@ class MessagingViewModelTest {
         blockedPeerRepository = mockk()
         identityResolutionManager = mockk()
         coEvery { identityResolutionManager.requestPathForContact(any()) } just Runs
+        // LCS: a delivery failure (or a propagation retry) now forces a path request,
+        // so every test that emits one of those statuses reaches this. Stubbed here so
+        // those tests don't leak an un-awaited coroutine dying on an unstubbed call.
+        coEvery { identityResolutionManager.forcePathRequest(any(), any()) } returns true
 
         notificationHelper = mockk()
         every { notificationHelper.cancelNotificationForConversation(any()) } just Runs
@@ -376,7 +380,12 @@ class MessagingViewModelTest {
                     identityResolutionManager,
                     notificationHelper,
                     rnsTelephony,
-                ).also { it.attachmentIoDispatcher = StandardTestDispatcher(testScheduler) }
+                ).also {
+                    it.attachmentIoDispatcher = StandardTestDispatcher(testScheduler)
+                    // LCS: without this the fire-and-forget path requests run on the
+                    // real Dispatchers.IO pool, which advanceUntilIdle() can't see.
+                    it.pathRequestDispatcher = StandardTestDispatcher(testScheduler)
+                }
             advanceUntilIdle()
             testBody()
         }
@@ -5966,5 +5975,342 @@ class MessagingViewModelTest {
         runViewModelTest {
             // Before loading any conversation
             assertNull(viewModel.announceInfo.value)
+        }
+
+    // ========== LCS: PATH REQUEST TESTS ==========
+
+    /**
+     * Collects `viewModel.pathRequestMessage` while [block] runs, then cancels the
+     * collector and returns what arrived. The flow is a hot [SharedFlow] with no
+     * replay, so the collector has to be running before the action is triggered.
+     */
+    private suspend fun TestScope.collectingPathMessages(block: suspend () -> Unit): List<String> {
+        val received = mutableListOf<String>()
+        val collector = launch { viewModel.pathRequestMessage.collect { received += it } }
+        advanceUntilIdle()
+        block()
+        advanceUntilIdle()
+        collector.cancel()
+        return received
+    }
+
+    @Test
+    fun `requestPathForMessage forces a path request for the message's peer`() =
+        runViewModelTest {
+            coEvery { conversationRepository.getMessageById("test-id") } returns createMessageEntity()
+            val hash = slot<String>()
+            val respectCooldown = slot<Boolean>()
+            coEvery {
+                identityResolutionManager.forcePathRequest(capture(hash), capture(respectCooldown))
+            } returns true
+
+            viewModel.requestPathForMessage("test-id")
+            advanceUntilIdle()
+
+            assertEquals("conv-123", hash.captured)
+            // A deliberate tap must not be silently swallowed by the rate limit.
+            assertFalse("A user-initiated request must bypass the cooldown", respectCooldown.captured)
+        }
+
+    @Test
+    fun `requestPathForMessage reports success to the user`() =
+        runViewModelTest {
+            coEvery { conversationRepository.getMessageById("test-id") } returns createMessageEntity()
+            coEvery { identityResolutionManager.forcePathRequest(any(), any()) } returns true
+
+            val messages = collectingPathMessages { viewModel.requestPathForMessage("test-id") }
+
+            assertEquals(1, messages.size)
+            assertTrue(
+                "Should confirm the request went out, was: ${messages.first()}",
+                messages.first().contains("Path request sent"),
+            )
+        }
+
+    @Test
+    fun `requestPathForMessage reports failure to the user`() =
+        runViewModelTest {
+            coEvery { conversationRepository.getMessageById("test-id") } returns createMessageEntity()
+            coEvery { identityResolutionManager.forcePathRequest(any(), any()) } returns false
+
+            val messages = collectingPathMessages { viewModel.requestPathForMessage("test-id") }
+
+            assertEquals(1, messages.size)
+            assertTrue(
+                "Should say it couldn't send, was: ${messages.first()}",
+                messages.first().contains("Couldn't send a path request"),
+            )
+        }
+
+    @Test
+    fun `requestPathForMessage falls back to the open conversation when the message is gone`() =
+        runViewModelTest {
+            // A message can be deleted between the long-press and the tap. The peer
+            // is still the open chat, so the request should still reach someone.
+            coEvery { conversationRepository.getMessageById("test-id") } returns null
+            val hash = slot<String>()
+            coEvery {
+                identityResolutionManager.forcePathRequest(capture(hash), any())
+            } returns true
+            viewModel.loadMessages("fallbackpeerhash")
+            advanceUntilIdle()
+
+            viewModel.requestPathForMessage("test-id")
+            advanceUntilIdle()
+
+            assertEquals("fallbackpeerhash", hash.captured)
+        }
+
+    @Test
+    fun `requestPathForMessage survives a repository failure`() =
+        runViewModelTest {
+            // The lookup is best-effort; a DB error must fall through to the open
+            // conversation rather than throwing out of the coroutine.
+            coEvery { conversationRepository.getMessageById("test-id") } throws RuntimeException("DB error")
+            coEvery { identityResolutionManager.forcePathRequest(any(), any()) } returns true
+            viewModel.loadMessages("fallbackpeerhash")
+            advanceUntilIdle()
+
+            val messages = collectingPathMessages { viewModel.requestPathForMessage("test-id") }
+
+            assertEquals(1, messages.size)
+            assertTrue(messages.first().contains("Path request sent"))
+        }
+
+    @Test
+    fun `requestPathForMessage tells the user when there is no peer to ask about`() =
+        runViewModelTest {
+            coEvery { conversationRepository.getMessageById("test-id") } returns null
+
+            val messages = collectingPathMessages { viewModel.requestPathForMessage("test-id") }
+
+            assertEquals(1, messages.size)
+            assertTrue(
+                "Should admit it couldn't resolve a peer, was: ${messages.first()}",
+                messages.first().contains("Couldn't work out who"),
+            )
+            coVerify(exactly = 0) { identityResolutionManager.forcePathRequest(any(), any()) }
+        }
+
+    /**
+     * Builds a ViewModel wired to [deliveryStatusFlow] with the path-request
+     * dispatcher on the test scheduler, so an emitted status update can be driven
+     * to completion with advanceUntilIdle().
+     */
+    private fun TestScope.viewModelObserving(
+        deliveryStatusFlow: MutableSharedFlow<DeliveryStatusUpdate>,
+    ): MessagingViewModel {
+        every { rnsLxmf.observeDeliveryStatus() } returns deliveryStatusFlow
+        return MessagingViewModel(
+            applicationContext,
+            rnsCore,
+            rnsLxmf,
+            rnsTransportAdmin,
+            conversationRepository,
+            announceRepository,
+            contactRepository,
+            activeConversationManager,
+            settingsRepository,
+            propagationNodeManager,
+            locationSharingManager,
+            identityRepository,
+            conversationLinkManager,
+            receivedLocationRepository,
+            blockedPeerRepository,
+            identityResolutionManager,
+            notificationHelper,
+            rnsTelephony,
+        ).also {
+            it.attachmentIoDispatcher = StandardTestDispatcher(testScheduler)
+            it.pathRequestDispatcher = StandardTestDispatcher(testScheduler)
+        }
+    }
+
+    private fun sentMessage(
+        hash: String,
+        deliveryMethod: String? = "direct",
+    ) = MessageEntity(
+        id = hash,
+        conversationHash = testPeerHash,
+        identityHash = "test_identity_hash",
+        content = "Test message",
+        timestamp = 1000L,
+        isFromMe = true,
+        status = "sent",
+        deliveryMethod = deliveryMethod,
+    )
+
+    @Test
+    fun `a failed delivery forces a path request for the peer`() =
+        runViewModelTest {
+            // The case the feature exists for: the message was accepted for sending,
+            // so the backend never resolved an identity and never asked for a path.
+            // The route it used has since died, and the failure arrives async.
+            val hash = "failed_delivery_hash"
+            val deliveryStatusFlow = MutableSharedFlow<DeliveryStatusUpdate>()
+            coEvery {
+                conversationRepository.applyDeliveryStatus(hash, any(), "test_identity_hash")
+            } returns sentMessage(hash)
+            val requestedHash = slot<String>()
+            val respectCooldown = slot<Boolean>()
+            coEvery {
+                identityResolutionManager.forcePathRequest(capture(requestedHash), capture(respectCooldown))
+            } returns true
+
+            viewModelObserving(deliveryStatusFlow)
+            advanceUntilIdle()
+
+            deliveryStatusFlow.emit(
+                DeliveryStatusUpdate(
+                    messageHash = hash,
+                    status = DeliveryStatus.FAILED,
+                    timestamp = System.currentTimeMillis(),
+                    originatingIdentityHash = "test_identity_hash",
+                ),
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                "Should ask about the peer the failed message was addressed to",
+                testPeerHash,
+                requestedHash.captured,
+            )
+            // Automatic, so the rate limit applies — respectCooldown defaults to true.
+            assertTrue("An automatic request must respect the cooldown", respectCooldown.captured)
+        }
+
+    @Test
+    fun `a successful delivery does not request a path`() =
+        runViewModelTest {
+            // A path request is broadcast on every interface. Firing one on a healthy
+            // delivery would put that on the air for every message sent.
+            val hash = "delivered_hash"
+            val deliveryStatusFlow = MutableSharedFlow<DeliveryStatusUpdate>()
+            coEvery {
+                conversationRepository.applyDeliveryStatus(hash, any(), "test_identity_hash")
+            } returns sentMessage(hash)
+            coEvery { conversationLinkManager.recordPeerActivity(any(), any()) } just Runs
+            coEvery { rnsCore.getNextHopInterfaceName(any()) } returns null
+
+            viewModelObserving(deliveryStatusFlow)
+            advanceUntilIdle()
+
+            val emitResult =
+                runCatching {
+                    deliveryStatusFlow.emit(
+                        DeliveryStatusUpdate(
+                            messageHash = hash,
+                            status = DeliveryStatus.DELIVERED,
+                            timestamp = System.currentTimeMillis(),
+                            originatingIdentityHash = "test_identity_hash",
+                        ),
+                    )
+                }
+            advanceUntilIdle()
+
+            assertTrue("Emission should complete", emitResult.isSuccess)
+            coVerify(exactly = 0) { identityResolutionManager.forcePathRequest(any(), any()) }
+        }
+
+    @Test
+    fun `a failed delivery for an unknown message requests nothing`() =
+        runViewModelTest {
+            // No MessageEntity means no conversation hash to ask about.
+            val hash = "unknown_hash"
+            val deliveryStatusFlow = MutableSharedFlow<DeliveryStatusUpdate>()
+            coEvery {
+                conversationRepository.applyDeliveryStatus(hash, any(), "test_identity_hash")
+            } returns null
+
+            viewModelObserving(deliveryStatusFlow)
+            advanceUntilIdle()
+
+            val emitResult =
+                runCatching {
+                    deliveryStatusFlow.emit(
+                        DeliveryStatusUpdate(
+                            messageHash = hash,
+                            status = DeliveryStatus.FAILED,
+                            timestamp = System.currentTimeMillis(),
+                            originatingIdentityHash = "test_identity_hash",
+                        ),
+                    )
+                }
+            advanceUntilIdle()
+
+            assertTrue("Emission should complete", emitResult.isSuccess)
+            coVerify(exactly = 0) { identityResolutionManager.forcePathRequest(any(), any()) }
+        }
+
+    @Test
+    fun `a propagation retry forces a path request`() =
+        runViewModelTest {
+            // The common path, and the one easiest to break. With a propagation node
+            // configured — the default — a failed direct delivery never reports
+            // FAILED; event_bridge schedules the fallback and reports
+            // RETRYING_PROPAGATED. Note the row comes back with deliveryMethod
+            // already rewritten to "propagated" by the DAO reducer as part of THIS
+            // update, so this branch must not be gated on that column.
+            val hash = "retrying_hash"
+            val deliveryStatusFlow = MutableSharedFlow<DeliveryStatusUpdate>()
+            coEvery {
+                conversationRepository.applyDeliveryStatus(hash, any(), "test_identity_hash")
+            } returns sentMessage(hash, deliveryMethod = "propagated")
+            coEvery { conversationRepository.updateMessageDeliveryDetails(any(), any(), any()) } just Runs
+            val requestedHash = slot<String>()
+            coEvery {
+                identityResolutionManager.forcePathRequest(capture(requestedHash), any())
+            } returns true
+
+            viewModelObserving(deliveryStatusFlow)
+            advanceUntilIdle()
+
+            deliveryStatusFlow.emit(
+                DeliveryStatusUpdate(
+                    messageHash = hash,
+                    status = DeliveryStatus.RETRYING_PROPAGATED,
+                    timestamp = System.currentTimeMillis(),
+                    originatingIdentityHash = "test_identity_hash",
+                ),
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                "A propagation fallback means the direct route failed — ask for a path",
+                testPeerHash,
+                requestedHash.captured,
+            )
+        }
+
+    @Test
+    fun `a failed propagated message does not request a path for the peer`() =
+        runViewModelTest {
+            // The user addressed this to a propagation node, so what failed is the
+            // node, not the peer. A path to the peer can't help and costs airtime.
+            val hash = "propagated_failed_hash"
+            val deliveryStatusFlow = MutableSharedFlow<DeliveryStatusUpdate>()
+            coEvery {
+                conversationRepository.applyDeliveryStatus(hash, any(), "test_identity_hash")
+            } returns sentMessage(hash, deliveryMethod = "propagated")
+            coEvery { conversationRepository.updateMessageDeliveryDetails(any(), any(), any()) } just Runs
+
+            viewModelObserving(deliveryStatusFlow)
+            advanceUntilIdle()
+
+            val emitResult =
+                runCatching {
+                    deliveryStatusFlow.emit(
+                        DeliveryStatusUpdate(
+                            messageHash = hash,
+                            status = DeliveryStatus.FAILED,
+                            timestamp = System.currentTimeMillis(),
+                            originatingIdentityHash = "test_identity_hash",
+                        ),
+                    )
+                }
+            advanceUntilIdle()
+
+            assertTrue("Emission should complete", emitResult.isSuccess)
+            coVerify(exactly = 0) { identityResolutionManager.forcePathRequest(any(), any()) }
         }
 }

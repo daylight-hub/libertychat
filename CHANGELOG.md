@@ -9,6 +9,66 @@ upstream; upstream's own history is not repeated here.
 
 ---
 
+## 2.1.0 — 2026-10-07
+
+### Added
+
+- **Path request when a message fails to deliver.** A message that comes back
+  failed now triggers `RNS.Transport.request_path` for that peer, so the route
+  can be rediscovered instead of the message sitting dead until the user
+  notices.
+  - Hooked to the **delivery failure**, not the send call. A send that fails
+    synchronously does so only when the backend couldn't resolve the recipient
+    at all — and by then it has already called `request_path` itself and polled
+    for ten seconds, so asking again there would just put a second broadcast on
+    the air for nothing.
+  - The case with no path request anywhere is the one this catches. Once a peer
+    has been resolved its destination is cached, so a peer that was reachable an
+    hour ago and isn't now skips resolution entirely, goes straight to
+    `handle_outbound` over a path that no longer leads anywhere, and surfaces as
+    a delivery failure later. Nothing in that sequence ever asks for a new
+    route, and RNS won't drop the stale entry until it expires on its own.
+  - The request is **forced** — it does not skip when RNS already holds a path.
+    That guard is right for the startup sweep and for opening a chat, and wrong
+    here, since a stale path is the whole problem.
+  - **Rate-limited to one automatic request per peer per minute.** A path
+    request is broadcast on every active interface, which costs real airtime on
+    a LoRa link; a conversation failing repeatedly costs one request a minute,
+    not one per message.
+  - Nothing re-sends automatically. A route takes time to return and a retry
+    racing the announce would fail again, so the message stays "failed" and
+    **Retry** is there once the path is back.
+- **Request path** on the message action menu (long-press a message), for asking
+  on demand rather than waiting — useful when a repeater has just come back up.
+  A deliberate tap bypasses the rate limit, since an explicit action that
+  silently does nothing is worse than the airtime. A Toast confirms the request
+  went out; a path request is fire-and-forget at the protocol level, so nothing
+  can confirm more than that.
+
+### Changed
+
+- **Medium Fast is now the default modem preset**, in place of Long Fast. SF9 on
+  a 250 kHz channel leaves a rooftop repeater enough airtime headroom to hear,
+  decode and re-transmit a frame before the next one arrives, while staying
+  faster than the Long presets — and LCS deployments lean on rooftop repeaters.
+  The wizard's pre-filled spreading factor moves from 11 to 9 to match; bandwidth
+  and coding rate are the same on both presets, so slot counts are unchanged.
+  Existing interfaces keep whatever they were configured with.
+- Modem preset badges reworked around that change: **Medium Fast** reads *Good
+  range with rooftop repeaters*, **Long Fast** reads *Good for ground radios*
+  (it no longer carries *Default*), and **Medium Slow** keeps *Works well with
+  repeaters*. No preset is badged *Default* any more — the default is shown by
+  being pre-selected.
+- A "no route" send failure now reads *"No route to this contact. They may be
+  offline or out of range — Retry once they're back."* instead of surfacing the
+  backend's `IdentityNotFound`, which read as though the contact were wrong
+  rather than unreachable.
+- The message action row scrolls horizontally. It reaches seven buttons with the
+  new action, which overflows a compact phone — the far end was previously
+  unreachable.
+
+---
+
 ## 2.0.9 — 2026-10-06
 
 ### Added

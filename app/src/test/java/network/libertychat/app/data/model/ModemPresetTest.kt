@@ -126,13 +126,15 @@ class ModemPresetTest {
     // ========== DEFAULT Preset Tests ==========
 
     @Test
-    fun `DEFAULT is LONG_FAST`() {
-        assertEquals(ModemPreset.LONG_FAST, ModemPreset.DEFAULT)
+    fun `DEFAULT is MEDIUM_FAST`() {
+        // LCS: Medium Fast rather than upstream's Long Fast — LCS deployments lean
+        // on rooftop repeaters, where the extra speed beats Long Fast's reach.
+        assertEquals(ModemPreset.MEDIUM_FAST, ModemPreset.DEFAULT)
     }
 
     @Test
     fun `DEFAULT has expected parameters`() {
-        assertEquals(11, ModemPreset.DEFAULT.spreadingFactor)
+        assertEquals(9, ModemPreset.DEFAULT.spreadingFactor)
         assertEquals(250_000, ModemPreset.DEFAULT.bandwidth)
         assertEquals(5, ModemPreset.DEFAULT.codingRate)
     }
@@ -202,15 +204,24 @@ class ModemPresetTest {
 
     @Test
     fun `medium presets are badged for repeater use`() {
-        assertEquals("Works well with repeaters", ModemPreset.MEDIUM_FAST.lcsBadge)
+        assertEquals("Good range with rooftop repeaters", ModemPreset.MEDIUM_FAST.lcsBadge)
         assertEquals("Works well with repeaters", ModemPreset.MEDIUM_SLOW.lcsBadge)
     }
 
     @Test
-    fun `long fast keeps the default badge and short fast the voice badge`() {
-        // Adding the repeater badges must not displace the two that already ship.
-        assertEquals("Default", ModemPreset.LONG_FAST.lcsBadge)
+    fun `long fast is badged for ground radios and short fast for voice`() {
+        // Long Fast lost the "Default" badge when Medium Fast became the default;
+        // it is now positioned for radios working each other directly.
+        assertEquals("Good for ground radios", ModemPreset.LONG_FAST.lcsBadge)
         assertEquals("Best for voice over LoRa", ModemPreset.SHORT_FAST.lcsBadge)
+    }
+
+    @Test
+    fun `no preset is badged Default any more`() {
+        // The default is conveyed by being pre-selected in the wizard, not by a
+        // badge — so a stale "Default" chip on a non-default preset would lie.
+        val badged = ModemPreset.entries.filter { it.lcsBadge == "Default" }
+        assertEquals("Unexpected Default badge on: ${badged.map { it.name }}", 0, badged.size)
     }
 
     @Test

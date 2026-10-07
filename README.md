@@ -40,12 +40,17 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
   is what the wizard looks for; a board that names itself something else — a
   LILYGO T3S3, say — keeps its own 20 dBm default. The hint under the power
   field names the board detected, and the figure is only a pre-filled default.
-- **Long Fast** badged *Default* for general use; **Short Fast** badged
-  *Best for voice over LoRa* — at ~10.9 kbps it is the slowest preset that can
-  actually carry a live call, against Long Fast's ~1.07 kbps.
-- **Medium Fast** and **Medium Slow** badged *Works well with repeaters* — at
-  SF9–10 on a 250 kHz channel they leave a repeater enough airtime headroom to
-  hear, decode and re-transmit a frame before the next one arrives.
+- **Medium Fast is the default preset** (SF9 / 250 kHz / CR 4:5), badged *Good
+  range with rooftop repeaters*. LCS deployments lean on rooftop repeaters, and
+  at SF9 there is enough airtime headroom for a repeater to hear, decode and
+  re-transmit a frame before the next arrives — while staying faster than the
+  Long presets. **Medium Slow** carries the general *Works well with repeaters*
+  note for the same reason one notch slower.
+- **Long Fast** badged *Good for ground radios* — radios working each other
+  directly, where the extra reach is worth dropping to ~1.07 kbps.
+- **Short Fast** badged *Best for voice over LoRa* — at ~10.9 kbps it is the
+  slowest preset that can actually carry a live call. Neither Long Fast nor
+  Medium Fast can; they are messaging presets.
 - **Long Range / Turbo** (SF11 / 500 kHz / CR 4:8, ~1.34 kbps) for more
   throughput than Long Fast on a wider channel.
 - **Codec2 3200** badged *Voice/PTT* in the call quality picker.
@@ -67,6 +72,18 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
   AutoInterface and Bluetooth LE only — nothing reaches the internet until the
   user adds a server or attaches an RNode. Upstream's Beleth RNS Hub seed is
   removed and deleted from existing installs on upgrade.
+- **Path request when a message fails to deliver.** A failed delivery asks the
+  network for a path to that peer instead of leaving the message dead in the
+  thread. The request is forced rather than skipped when a path is already
+  known — a stale path is exactly why a send to a previously-reachable peer
+  fails. It hangs off the delivery failure rather than the send call, because a
+  synchronous send failure means the backend never resolved the peer at all and
+  has already requested a path itself; the gap is the cached-destination case,
+  where nothing asks for a route. Rate-limited to one automatic request per peer
+  per minute, since a path request goes out on every interface.
+- **Request path** on the message action menu, for asking on demand — when a
+  repeater has just come back up, say, rather than waiting for the automatic
+  attempt. A deliberate tap bypasses the rate limit.
 - When adding a TCP server, the list offers the LCS Gateway, a local IP RNode,
   or a **Command Center PRO Client** (`liberty.local:4246`).
 - **Command Center PRO over TCP** is offered as its own choice during onboarding

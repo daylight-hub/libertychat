@@ -295,6 +295,14 @@ class MessagingViewModel
         private val sendInProgress = AtomicBoolean(false)
         private val voiceRecorderOperationLock = Any()
         internal var attachmentIoDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+        /**
+         * LCS: dispatcher for the fire-and-forget path requests. Overridden in tests
+         * so `advanceUntilIdle()` can actually wait for them; a hardcoded
+         * [Dispatchers.IO] runs on a real thread pool that the test scheduler has no
+         * visibility into.
+         */
+        internal var pathRequestDispatcher: CoroutineDispatcher = Dispatchers.IO
         private var voiceRecordingLease: MicrophoneAdmissionArbiter.Lease? = null
         private var voiceRecordingStartJob: Job? = null
         @Volatile private var voiceRecorderCleanupThread: Thread? = null
@@ -310,6 +318,13 @@ class MessagingViewModel
         // collects this and shows a Snackbar pointing back to Settings.
         private val _locationSharingMessage = MutableSharedFlow<String>(extraBufferCapacity = 4)
         val locationSharingMessage: SharedFlow<String> = _locationSharingMessage.asSharedFlow()
+
+        // LCS: user-facing result of the "Request path" message action. A path
+        // request is fire-and-forget at the protocol level — nothing comes back to
+        // say it worked — so the UI can only confirm that one was sent. Collected by
+        // MessagingScreen and shown as a Toast.
+        private val _pathRequestMessage = MutableSharedFlow<String>(extraBufferCapacity = 4)
+        val pathRequestMessage: SharedFlow<String> = _pathRequestMessage.asSharedFlow()
 
         // Image quality selection dialog state
         private val _qualitySelectionState = MutableStateFlow<QualitySelectionState?>(null)
@@ -1023,6 +1038,48 @@ class MessagingViewModel
                         enrichSentInterfaceOnDelivery(message)
                     }
 
+                    // LCS: a message that was accepted for sending and then didn't
+                    // get there is the stale-path case — ask for a fresh route.
+                    //
+                    // RETRYING_PROPAGATED has to be in here, and is in fact the more
+                    // important of the two. When a propagation node is configured and
+                    // try_propagation_on_fail is set — the default — a failed direct
+                    // delivery does NOT report FAILED. event_bridge.py schedules the
+                    // propagation fallback instead and emits RETRYING_PROPAGATED, and
+                    // FAILED only arrives if that fallback also fails. So for most
+                    // users the direct route going stale would never reach this hook
+                    // on FAILED alone. RETRYING_PROPAGATED fires precisely *because*
+                    // direct delivery failed, which is the signal we want; the
+                    // cooldown in forcePathRequest collapses it with the FAILED that
+                    // may follow.
+                    val directRouteFailed =
+                        when (update.status) {
+                            // Always a direct-delivery failure: the propagation
+                            // fallback runs only *because* the direct attempt failed.
+                            //
+                            // Note this branch must NOT be gated on deliveryMethod.
+                            // The reducer in MessageDao rewrites deliveryMethod to
+                            // "propagated" as part of this very update, so the row
+                            // returned here always reads "propagated" — testing it
+                            // would suppress the exact case this feature exists for.
+                            DeliveryStatus.RETRYING_PROPAGATED -> true
+
+                            // Terminal failure. Skip it when the row is propagated,
+                            // which covers two cases that both want skipping: the
+                            // user addressed the message to a propagation node (so
+                            // what failed is the node, not the peer, and a path to
+                            // the peer can't help), or the fallback above already
+                            // failed — and that already asked on
+                            // RETRYING_PROPAGATED.
+                            DeliveryStatus.FAILED -> message.deliveryMethod != "propagated"
+
+                            else -> false
+                        }
+
+                    if (directRouteFailed) {
+                        requestPathAfterDeliveryFailure(message.conversationHash)
+                    }
+
                     Log.d(TAG, "Updated message ${update.messageHash.take(16)}... status to ${update.status.wireValue}")
                 } else {
                     Log.w(TAG, "Delivery status update for unknown message after $maxRetries retries: ${update.messageHash.take(16)}...")
@@ -1596,6 +1653,42 @@ class MessagingViewModel
                 clearSubmittedAttachments(imageData, fileAttachments, voiceRecording)
             }
             return composerCanClear
+        }
+
+        /**
+         * LCS: ask the network for a fresh route after a message we had already
+         * handed to the backend came back failed.
+         *
+         * This is the hook that earns its keep, and the reason it is here rather
+         * than on the synchronous send failure. A send that fails *synchronously*
+         * does so only when the backend couldn't resolve the recipient's identity at
+         * all, and by then it has already called `request_path` itself and polled
+         * for ten seconds (`PythonRnsLxmf.resolveRecipientDestination`,
+         * `NativeMessageSender.resolveRecipientIdentity`) — asking a second time
+         * would just put another broadcast on the air for nothing.
+         *
+         * The case with no path request anywhere is this one. Once a peer has been
+         * resolved its destination is cached, so a peer that was reachable an hour
+         * ago and isn't now skips that resolution entirely, goes straight to
+         * `handle_outbound` over a path that no longer leads anywhere, and surfaces
+         * as a delivery failure later. Nothing in that sequence ever asks for a new
+         * route, and RNS won't drop the stale entry until it expires.
+         *
+         * Nothing re-sends automatically: a route takes time to come back and a
+         * retry racing the announce would fail again. The message is already marked
+         * failed, so Retry is there once the path returns. Rate-limiting lives in
+         * [IdentityResolutionManager.forcePathRequest] — a conversation failing
+         * repeatedly costs one request per minute, not one per message.
+         */
+        private fun requestPathAfterDeliveryFailure(destinationHash: String) {
+            if (destinationHash.isBlank()) return
+            viewModelScope.launch(pathRequestDispatcher) {
+                runCatching {
+                    identityResolutionManager.forcePathRequest(destinationHash)
+                }.onFailure { e ->
+                    Log.e(TAG, "Path request after delivery failure threw", e)
+                }
+            }
         }
 
         private suspend fun clearSubmittedDraft(
@@ -2669,6 +2762,54 @@ class MessagingViewModel
         }
 
         /**
+         * LCS: ask the network for a route to this message's peer, on request.
+         *
+         * Exposed on the message action menu so a user who can see a message sitting
+         * unsent — or who knows a repeater just came back up — can trigger route
+         * discovery without waiting for the automatic attempt or for RNS to expire
+         * the stale entry on its own.
+         *
+         * Bypasses [IdentityResolutionManager.forcePathRequest]'s cooldown: this only
+         * runs when someone deliberately tapped it, and an explicit action that
+         * silently does nothing is worse than the airtime it costs.
+         *
+         * @param messageId the message whose conversation to resolve a path for.
+         */
+        fun requestPathForMessage(messageId: String) {
+            viewModelScope.launch(pathRequestDispatcher) {
+                // Prefer the message's own conversation over _currentConversation so
+                // the request still goes to the right peer if the open chat changed
+                // between the long-press and the tap.
+                val destinationHash =
+                    runCatching { conversationRepository.getMessageById(messageId)?.conversationHash }
+                        .getOrNull()
+                        ?: _currentConversation.value
+
+                if (destinationHash.isNullOrBlank()) {
+                    Log.e(TAG, "Cannot request path: no conversation for message $messageId")
+                    _pathRequestMessage.emit("Couldn't work out who to request a path for.")
+                    return@launch
+                }
+
+                val issued =
+                    runCatching {
+                        identityResolutionManager.forcePathRequest(destinationHash, respectCooldown = false)
+                    }.getOrElse { e ->
+                        Log.e(TAG, "Path request threw for ${destinationHash.take(8)}...", e)
+                        false
+                    }
+
+                _pathRequestMessage.emit(
+                    if (issued) {
+                        "Path request sent. Routes can take a moment to come back."
+                    } else {
+                        "Couldn't send a path request — check that an interface is connected."
+                    },
+                )
+            }
+        }
+
+        /**
          * Retry sending a failed message.
          * Re-sends the message with the same content and destination,
          * updating the database with the new message hash.
@@ -2803,7 +2944,7 @@ class MessagingViewModel
                             conversationRepository.updateMessageDeliveryDetails(
                                 messageId,
                                 deliveryMethod = null,
-                                errorMessage = error.message,
+                                errorMessage = friendlyOutboundError(error.message),
                             )
                         }
                 } catch (e: Exception) {
@@ -3024,8 +3165,43 @@ private fun friendlyOutboundError(raw: String?): String? =
         raw == null -> null
         raw.contains("TransactionTooLarge", ignoreCase = true) ->
             "Attachment too large to send. Try a smaller file."
+        // LCS: the backends surface "no usable route" as identity-not-found, which
+        // reads to a user as though the contact were wrong rather than unreachable.
+        isRoutingFailureMessage(raw) ->
+            "No route to this contact. They may be offline or out of range — Retry once they're back."
         else -> raw
     }
+
+/**
+ * LCS: true when an outbound error text means "couldn't find a route" rather than
+ * something local.
+ *
+ * Used only to pick the wording in [friendlyOutboundError]. The two backends word
+ * an unreachable peer differently — the Python flavor's `IdentityNotFound` renders
+ * as "Identity not found: <hex>", the Kotlin flavor raises
+ * `IllegalStateException("Recipient not found after path request: …")` — so both
+ * shapes are matched.
+ */
+private fun isRoutingFailureMessage(raw: String?): Boolean {
+    if (raw == null) return false
+    // An oversized attachment can surface through a generic error path; never
+    // treat it as a routing problem.
+    if (raw.contains("TransactionTooLarge", ignoreCase = true)) return false
+    return ROUTING_FAILURE_MARKERS.any { raw.contains(it, ignoreCase = true) }
+}
+
+private val ROUTING_FAILURE_MARKERS =
+    listOf(
+        "Recipient not found after path request",
+        "IdentityNotFound",
+        "identity not found",
+        "identity wasn't found",
+        "no path",
+        "no route",
+        "unreachable",
+        "path not found",
+        "destination unknown",
+    )
 
 private fun determineDeliveryMethod(
     sanitized: String,

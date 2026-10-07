@@ -104,17 +104,19 @@ enum class ModemPreset(
     /**
      * LCS: badge text shown beside the preset name, or null for no badge.
      *
-     * [LONG_FAST] is the general-purpose LCS default. [SHORT_FAST] is the one
-     * fast enough for realtime voice: at SF7/BW250/CR5 the raw link is
-     * ~10.9 kbps, against ~1.07 kbps for Long Fast. Codec2 3200 needs
-     * ~3.2 kbps of payload plus RNS framing, so Long Fast cannot carry a
-     * live call at all — it is a messaging preset.
+     * [MEDIUM_FAST] is the LCS default ([DEFAULT]) and is badged for rooftop
+     * repeaters: at SF9 on a 250 kHz channel it keeps enough airtime headroom for
+     * a repeater to hear, decode and re-transmit a frame without colliding with
+     * the next one, while staying faster than the Long presets. [MEDIUM_SLOW]
+     * carries the general repeater note for the same reason one notch slower.
      *
-     * [MEDIUM_FAST] and [MEDIUM_SLOW] are badged for repeater use: at SF9–10
-     * on a 250 kHz channel they keep enough airtime headroom for a repeater to
-     * hear, decode and re-transmit a frame without colliding with the next
-     * one, which the Short presets are too fast for and the Long presets too
-     * slow for.
+     * [LONG_FAST] is badged for ground radios — radios working each other
+     * directly, where the extra reach is worth the drop to ~1.07 kbps.
+     *
+     * [SHORT_FAST] is the one fast enough for realtime voice: at SF7/BW250/CR5 the
+     * raw link is ~10.9 kbps. Codec2 3200 needs ~3.2 kbps of payload plus RNS
+     * framing, so neither Long Fast nor Medium Fast can carry a live call — they
+     * are messaging presets.
      */
     val lcsBadge: String? = null,
 ) {
@@ -146,7 +148,7 @@ enum class ModemPreset(
         bandwidth = 250000,
         codingRate = 5,
         description = "Balanced speed and range",
-        lcsBadge = "Works well with repeaters",
+        lcsBadge = "Good range with rooftop repeaters",
     ),
     MEDIUM_SLOW(
         displayName = "Medium Slow",
@@ -169,7 +171,7 @@ enum class ModemPreset(
         bandwidth = 250000,
         codingRate = 5,
         description = "Good balance of speed and range",
-        lcsBadge = "Default",
+        lcsBadge = "Good for ground radios",
     ),
     LONG_MODERATE(
         displayName = "Long Moderate",
@@ -188,8 +190,15 @@ enum class ModemPreset(
     ;
 
     companion object {
-        /** Default preset - good balance for most use cases */
-        val DEFAULT = LONG_FAST
+        /**
+         * LCS default preset: [MEDIUM_FAST].
+         *
+         * SF9 on a 250 kHz channel, chosen over Long Fast because LCS deployments
+         * lean on rooftop repeaters — the extra speed matters more than Long Fast's
+         * reach when a repeater is doing the distance. Long Fast remains the better
+         * pick for ground radios working each other directly.
+         */
+        val DEFAULT = MEDIUM_FAST
 
         /** Find preset matching given parameters, or null if no match */
         fun findByParams(

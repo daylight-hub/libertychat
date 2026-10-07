@@ -182,11 +182,14 @@ data class RNodeWizardState(
     val interfaceName: String = DEFAULT_INTERFACE_NAME,
     // US default
     val frequency: String = "914875000",
-    // Long Fast default
+    // LCS: these three must stay in step with ModemPreset.DEFAULT (Medium Fast),
+    // since the review step shows them as the pre-filled radio parameters before
+    // the user has touched the preset picker.
+    // Medium Fast default
     val bandwidth: String = "250000",
-    // Long Fast default
-    val spreadingFactor: String = "11",
-    // Long Fast default (4/5)
+    // Medium Fast default
+    val spreadingFactor: String = "9",
+    // Medium Fast default (4/5)
     val codingRate: String = "5",
     // LCS: 22 dBm — safe across every board LCS ships, used until the board is
     // known. Overridden by the regional preset's board-aware default once a
