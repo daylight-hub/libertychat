@@ -317,6 +317,10 @@ class MessagingViewModelTest {
         // Mock delivery status observer (returns empty flow by default)
         every { rnsLxmf.observeDeliveryStatus() } returns flowOf()
         every { rnsLxmf.observeTransferProgress() } returns flowOf()
+        // LCS: a propagated message that fails now asks for a path to the node, so
+        // any test emitting that status reaches this. Default to "none configured";
+        // the two tests that care override it.
+        coEvery { rnsLxmf.getOutboundPropagationNode() } returns Result.success(null)
 
         // Mock reaction received flow (returns empty flow by default)
         every { rnsTransportAdmin.reactionReceivedFlow } returns MutableSharedFlow()
@@ -5981,7 +5985,7 @@ class MessagingViewModelTest {
 
     /**
      * Collects `viewModel.pathRequestMessage` while [block] runs, then cancels the
-     * collector and returns what arrived. The flow is a hot [SharedFlow] with no
+     * collector and returns what arrived. The flow is a hot SharedFlow with no
      * replay, so the collector has to be running before the action is triggered.
      */
     private suspend fun TestScope.collectingPathMessages(block: suspend () -> Unit): List<String> {
@@ -5995,30 +5999,32 @@ class MessagingViewModelTest {
     }
 
     @Test
-    fun `requestPathForMessage forces a path request for the message's peer`() =
+    fun `requestPathForCurrentConversation forces a path request for the open peer`() =
         runViewModelTest {
-            coEvery { conversationRepository.getMessageById("test-id") } returns createMessageEntity()
+            viewModel.loadMessages(testPeerHash)
+            advanceUntilIdle()
             val hash = slot<String>()
             val respectCooldown = slot<Boolean>()
             coEvery {
                 identityResolutionManager.forcePathRequest(capture(hash), capture(respectCooldown))
             } returns true
 
-            viewModel.requestPathForMessage("test-id")
+            viewModel.requestPathForCurrentConversation()
             advanceUntilIdle()
 
-            assertEquals("conv-123", hash.captured)
-            // A deliberate tap must not be silently swallowed by the rate limit.
+            assertEquals(testPeerHash, hash.captured)
+            // A deliberate tap must not be swallowed by the rate limit.
             assertFalse("A user-initiated request must bypass the cooldown", respectCooldown.captured)
         }
 
     @Test
-    fun `requestPathForMessage reports success to the user`() =
+    fun `requestPathForCurrentConversation reports success to the user`() =
         runViewModelTest {
-            coEvery { conversationRepository.getMessageById("test-id") } returns createMessageEntity()
+            viewModel.loadMessages(testPeerHash)
+            advanceUntilIdle()
             coEvery { identityResolutionManager.forcePathRequest(any(), any()) } returns true
 
-            val messages = collectingPathMessages { viewModel.requestPathForMessage("test-id") }
+            val messages = collectingPathMessages { viewModel.requestPathForCurrentConversation() }
 
             assertEquals(1, messages.size)
             assertTrue(
@@ -6028,12 +6034,13 @@ class MessagingViewModelTest {
         }
 
     @Test
-    fun `requestPathForMessage reports failure to the user`() =
+    fun `requestPathForCurrentConversation reports failure to the user`() =
         runViewModelTest {
-            coEvery { conversationRepository.getMessageById("test-id") } returns createMessageEntity()
+            viewModel.loadMessages(testPeerHash)
+            advanceUntilIdle()
             coEvery { identityResolutionManager.forcePathRequest(any(), any()) } returns false
 
-            val messages = collectingPathMessages { viewModel.requestPathForMessage("test-id") }
+            val messages = collectingPathMessages { viewModel.requestPathForCurrentConversation() }
 
             assertEquals(1, messages.size)
             assertTrue(
@@ -6043,51 +6050,16 @@ class MessagingViewModelTest {
         }
 
     @Test
-    fun `requestPathForMessage falls back to the open conversation when the message is gone`() =
+    fun `requestPathForCurrentConversation does nothing with no conversation open`() =
         runViewModelTest {
-            // A message can be deleted between the long-press and the tap. The peer
-            // is still the open chat, so the request should still reach someone.
-            coEvery { conversationRepository.getMessageById("test-id") } returns null
-            val hash = slot<String>()
-            coEvery {
-                identityResolutionManager.forcePathRequest(capture(hash), any())
-            } returns true
-            viewModel.loadMessages("fallbackpeerhash")
-            advanceUntilIdle()
-
-            viewModel.requestPathForMessage("test-id")
-            advanceUntilIdle()
-
-            assertEquals("fallbackpeerhash", hash.captured)
-        }
-
-    @Test
-    fun `requestPathForMessage survives a repository failure`() =
-        runViewModelTest {
-            // The lookup is best-effort; a DB error must fall through to the open
-            // conversation rather than throwing out of the coroutine.
-            coEvery { conversationRepository.getMessageById("test-id") } throws RuntimeException("DB error")
-            coEvery { identityResolutionManager.forcePathRequest(any(), any()) } returns true
-            viewModel.loadMessages("fallbackpeerhash")
-            advanceUntilIdle()
-
-            val messages = collectingPathMessages { viewModel.requestPathForMessage("test-id") }
-
-            assertEquals(1, messages.size)
-            assertTrue(messages.first().contains("Path request sent"))
-        }
-
-    @Test
-    fun `requestPathForMessage tells the user when there is no peer to ask about`() =
-        runViewModelTest {
-            coEvery { conversationRepository.getMessageById("test-id") } returns null
-
-            val messages = collectingPathMessages { viewModel.requestPathForMessage("test-id") }
+            // The overflow menu only exists inside a chat, but the ViewModel must not
+            // fire a request at nobody if it is called before one is loaded.
+            val messages = collectingPathMessages { viewModel.requestPathForCurrentConversation() }
 
             assertEquals(1, messages.size)
             assertTrue(
-                "Should admit it couldn't resolve a peer, was: ${messages.first()}",
-                messages.first().contains("Couldn't work out who"),
+                "Should ask the user to open a chat, was: ${messages.first()}",
+                messages.first().contains("Open a conversation first"),
             )
             coVerify(exactly = 0) { identityResolutionManager.forcePathRequest(any(), any()) }
         }
@@ -6283,16 +6255,55 @@ class MessagingViewModelTest {
         }
 
     @Test
-    fun `a failed propagated message does not request a path for the peer`() =
+    fun `a failed propagated message asks for a path to the propagation node`() =
         runViewModelTest {
-            // The user addressed this to a propagation node, so what failed is the
-            // node, not the peer. A path to the peer can't help and costs airtime.
+            // The last rung of the ladder: the message went to a propagation node and
+            // didn't get there, so the node is what's unreachable. Asking about the
+            // peer would be pointless — it was never the next hop.
             val hash = "propagated_failed_hash"
+            val nodeHash = "99aabbccddeeff0099aabbccddeeff00"
             val deliveryStatusFlow = MutableSharedFlow<DeliveryStatusUpdate>()
             coEvery {
                 conversationRepository.applyDeliveryStatus(hash, any(), "test_identity_hash")
             } returns sentMessage(hash, deliveryMethod = "propagated")
             coEvery { conversationRepository.updateMessageDeliveryDetails(any(), any(), any()) } just Runs
+            coEvery { rnsLxmf.getOutboundPropagationNode() } returns Result.success(nodeHash)
+            val requested = slot<String>()
+            coEvery {
+                identityResolutionManager.forcePathRequest(capture(requested), any())
+            } returns true
+
+            viewModelObserving(deliveryStatusFlow)
+            advanceUntilIdle()
+
+            deliveryStatusFlow.emit(
+                DeliveryStatusUpdate(
+                    messageHash = hash,
+                    status = DeliveryStatus.FAILED,
+                    timestamp = System.currentTimeMillis(),
+                    originatingIdentityHash = "test_identity_hash",
+                ),
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                "Should ask about the propagation node, not the peer",
+                nodeHash,
+                requested.captured,
+            )
+        }
+
+    @Test
+    fun `a failed propagated message asks for nothing when no node is configured`() =
+        runViewModelTest {
+            // Without a configured node there is no next hop to ask about.
+            val hash = "propagated_no_node_hash"
+            val deliveryStatusFlow = MutableSharedFlow<DeliveryStatusUpdate>()
+            coEvery {
+                conversationRepository.applyDeliveryStatus(hash, any(), "test_identity_hash")
+            } returns sentMessage(hash, deliveryMethod = "propagated")
+            coEvery { conversationRepository.updateMessageDeliveryDetails(any(), any(), any()) } just Runs
+            coEvery { rnsLxmf.getOutboundPropagationNode() } returns Result.success(null)
 
             viewModelObserving(deliveryStatusFlow)
             advanceUntilIdle()

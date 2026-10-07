@@ -68,6 +68,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AltRoute
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Call
@@ -588,7 +589,7 @@ fun MessagingScreen(
         }
     }
 
-    // LCS: result of the "Request path" message action.
+    // LCS: result of the "Request path" overflow-menu action.
     LaunchedEffect(viewModel) {
         viewModel.pathRequestMessage.collect { message ->
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
@@ -1342,6 +1343,22 @@ fun MessagingScreen(
                                     showTextSizeDialog = true
                                 },
                             )
+                            // LCS: on-demand route discovery for this peer. A path
+                            // belongs to the peer rather than to any one message, so it
+                            // lives here rather than on a per-message menu.
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.AltRoute,
+                                        contentDescription = null,
+                                    )
+                                },
+                                text = { Text("Request path") },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    viewModel.requestPathForCurrentConversation()
+                                },
+                            )
                             HorizontalDivider()
                             DropdownMenuItem(
                                 leadingIcon = {
@@ -1861,7 +1878,6 @@ fun MessagingScreen(
                             null
                         },
                     onDelete = { showDeleteConfirmation = true },
-                    onRequestPath = { viewModel.requestPathForMessage(state.messageId) },
                     onDismissStarted = {
                         // Show original message immediately when dismiss animation starts
                         viewModel.showOriginalMessage()

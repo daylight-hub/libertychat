@@ -1064,20 +1064,30 @@ class MessagingViewModel
                             // would suppress the exact case this feature exists for.
                             DeliveryStatus.RETRYING_PROPAGATED -> true
 
-                            // Terminal failure. Skip it when the row is propagated,
-                            // which covers two cases that both want skipping: the
-                            // user addressed the message to a propagation node (so
-                            // what failed is the node, not the peer, and a path to
-                            // the peer can't help), or the fallback above already
-                            // failed — and that already asked on
-                            // RETRYING_PROPAGATED.
+                            // Terminal failure on a non-propagated row: the direct
+                            // route is the one that failed, so ask about the peer.
+                            // A propagated row is handled below instead — there it
+                            // is the node that failed, not the peer.
                             DeliveryStatus.FAILED -> message.deliveryMethod != "propagated"
 
                             else -> false
                         }
 
+                    // The last leg: a propagated message that failed means the
+                    // propagation node was unreachable. Asking for a path to the peer
+                    // would be pointless — the peer was never the next hop — so ask
+                    // about the node itself. Covers both the user addressing a message
+                    // to the node directly and the automatic fallback failing after
+                    // the direct attempt already failed.
+                    val propagationRouteFailed =
+                        update.status == DeliveryStatus.FAILED &&
+                            message.deliveryMethod == "propagated"
+
                     if (directRouteFailed) {
                         requestPathAfterDeliveryFailure(message.conversationHash)
+                    }
+                    if (propagationRouteFailed) {
+                        requestPathToPropagationNode()
                     }
 
                     Log.d(TAG, "Updated message ${update.messageHash.take(16)}... status to ${update.status.wireValue}")
@@ -1687,6 +1697,41 @@ class MessagingViewModel
                     identityResolutionManager.forcePathRequest(destinationHash)
                 }.onFailure { e ->
                     Log.e(TAG, "Path request after delivery failure threw", e)
+                }
+            }
+        }
+
+        /**
+         * LCS: ask the network for a route to the configured outbound propagation
+         * node, after a propagated message failed to reach it.
+         *
+         * The last rung of the delivery ladder. A direct send that fails gets a path
+         * request for the peer and a propagation retry; if that retry also fails, the
+         * node is what's unreachable, and until now nothing asked about it — the peer
+         * had a path request it didn't need and the node had none at all.
+         *
+         * Keyed on the node's own hash, so the per-destination cooldown in
+         * [IdentityResolutionManager.forcePathRequest] rate-limits node requests
+         * separately from peer requests rather than one starving the other.
+         */
+        private fun requestPathToPropagationNode() {
+            viewModelScope.launch(pathRequestDispatcher) {
+                val nodeHash =
+                    runCatching { rnsLxmf.getOutboundPropagationNode().getOrNull() }
+                        .getOrNull()
+                        ?.takeIf { it.isNotBlank() }
+
+                if (nodeHash == null) {
+                    // Nothing configured, so the propagated send can't have been
+                    // aimed anywhere — nothing useful to ask about.
+                    Log.d(TAG, "Propagated delivery failed with no propagation node configured")
+                    return@launch
+                }
+
+                runCatching {
+                    identityResolutionManager.forcePathRequest(nodeHash)
+                }.onFailure { e ->
+                    Log.e(TAG, "Path request for propagation node threw", e)
                 }
             }
         }
@@ -2762,32 +2807,28 @@ class MessagingViewModel
         }
 
         /**
-         * LCS: ask the network for a route to this message's peer, on request.
+         * LCS: ask the network for a route to the peer of the open conversation.
          *
-         * Exposed on the message action menu so a user who can see a message sitting
+         * Exposed on the chat's overflow menu so a user who can see messages sitting
          * unsent — or who knows a repeater just came back up — can trigger route
          * discovery without waiting for the automatic attempt or for RNS to expire
          * the stale entry on its own.
          *
+         * A path is a property of the peer rather than of any one message, so this is
+         * scoped to the conversation: [_currentConversation] is the destination the
+         * chat is open on, and there is nothing a message id would add.
+         *
          * Bypasses [IdentityResolutionManager.forcePathRequest]'s cooldown: this only
          * runs when someone deliberately tapped it, and an explicit action that
          * silently does nothing is worse than the airtime it costs.
-         *
-         * @param messageId the message whose conversation to resolve a path for.
          */
-        fun requestPathForMessage(messageId: String) {
+        fun requestPathForCurrentConversation() {
             viewModelScope.launch(pathRequestDispatcher) {
-                // Prefer the message's own conversation over _currentConversation so
-                // the request still goes to the right peer if the open chat changed
-                // between the long-press and the tap.
-                val destinationHash =
-                    runCatching { conversationRepository.getMessageById(messageId)?.conversationHash }
-                        .getOrNull()
-                        ?: _currentConversation.value
+                val destinationHash = _currentConversation.value
 
                 if (destinationHash.isNullOrBlank()) {
-                    Log.e(TAG, "Cannot request path: no conversation for message $messageId")
-                    _pathRequestMessage.emit("Couldn't work out who to request a path for.")
+                    Log.e(TAG, "Cannot request path: no conversation is open")
+                    _pathRequestMessage.emit("Open a conversation first.")
                     return@launch
                 }
 

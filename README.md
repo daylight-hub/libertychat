@@ -81,7 +81,11 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
   has already requested a path itself; the gap is the cached-destination case,
   where nothing asks for a route. Rate-limited to one automatic request per peer
   per minute, since a path request goes out on every interface.
-- **Request path** on the message action menu, for asking on demand — when a
+  The same applies to the propagation leg: a message that failed at a
+  propagation node prompts a path request for the node rather than the peer. The
+  ladder is send → on direct failure ask about the peer and fall back to the
+  propagation node → on that failure ask about the node.
+- **Request path** in the chat's three-dot menu, for asking on demand — when a
   repeater has just come back up, say, rather than waiting for the automatic
   attempt. A deliberate tap bypasses the rate limit.
 - When adding a TCP server, the list offers the LCS Gateway, a local IP RNode,

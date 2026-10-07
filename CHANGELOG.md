@@ -35,15 +35,23 @@ upstream; upstream's own history is not repeated here.
     request is broadcast on every active interface, which costs real airtime on
     a LoRa link; a conversation failing repeatedly costs one request a minute,
     not one per message.
+  - **The propagation leg gets the same treatment.** A message that fell back to
+    a propagation node and failed there, or that the user addressed to one
+    directly, prompts a path request for **the node** rather than the peer — the
+    peer was never the next hop, so asking about it could not help. The full
+    ladder is now: send; if the direct route fails, ask for a path to the peer
+    and hand the message to the propagation node; if that fails too, ask for a
+    path to the node. Each rung is rate-limited on its own destination.
   - Nothing re-sends automatically. A route takes time to return and a retry
     racing the announce would fail again, so the message stays "failed" and
     **Retry** is there once the path is back.
-- **Request path** on the message action menu (long-press a message), for asking
-  on demand rather than waiting — useful when a repeater has just come back up.
-  A deliberate tap bypasses the rate limit, since an explicit action that
-  silently does nothing is worse than the airtime. A Toast confirms the request
-  went out; a path request is fire-and-forget at the protocol level, so nothing
-  can confirm more than that.
+- **Request path** in the chat's three-dot menu, for asking on demand rather
+  than waiting — useful when a repeater has just come back up. A path belongs to
+  the peer rather than to any one message, so it is scoped to the conversation. A
+  deliberate tap bypasses the rate limit, since an explicit action that silently
+  does nothing is worse than the airtime. A Toast confirms the request went out;
+  a path request is fire-and-forget at the protocol level, so nothing can
+  confirm more than that.
 
 ### Changed
 
@@ -63,9 +71,6 @@ upstream; upstream's own history is not repeated here.
   offline or out of range — Retry once they're back."* instead of surfacing the
   backend's `IdentityNotFound`, which read as though the contact were wrong
   rather than unreachable.
-- The message action row scrolls horizontally. It reaches seven buttons with the
-  new action, which overflows a compact phone — the far end was previously
-  unreachable.
 
 ---
 
