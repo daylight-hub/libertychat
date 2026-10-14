@@ -82,6 +82,9 @@ internal class BoundRnsTransportAdmin(
     override suspend fun getInterfaceStats(interfaceName: String): Map<String, Any>? =
         awaitBound().transportAdmin.getInterfaceStats(interfaceName)
 
+    override suspend fun reloadInterfaceByName(interfaceName: String): Boolean =
+        awaitBound().transportAdmin.reloadInterfaceByName(interfaceName)
+
     override suspend fun reconnectRNodeInterface() {
         awaitBound().transportAdmin.reconnectRNodeInterface()
     }

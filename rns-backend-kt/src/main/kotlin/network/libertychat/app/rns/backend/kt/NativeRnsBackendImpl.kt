@@ -2020,6 +2020,13 @@ class NativeRnsBackendImpl(
         applyBatteryProfileInternal()
     }
 
+    /**
+     * LCS: not supported on the kotlin backend — reticulum-kt exposes no live
+     * interface attach/detach/reload. Returning false tells the caller to fall
+     * back to a full stack restart.
+     */
+    override suspend fun reloadInterfaceByName(interfaceName: String): Boolean = false
+
     override suspend fun reconnectRNodeInterface() {
         withContext(Dispatchers.IO) {
             // Find and restart any RNode interfaces

@@ -6,7 +6,6 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import dagger.hilt.android.HiltAndroidApp
-import network.libertychat.app.rns.host.manager.CurrentTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,13 +44,6 @@ class ColumbaApplication : Application() {
     companion object {
         /** Timeout for IPC calls to prevent ANR during initialization */
         internal const val IPC_TIMEOUT_MS = 5000L
-
-        /**
-         * LCS: minimum gap between automatic AutoInterface recovery restarts. A
-         * restart drops every link for a moment, so a flapping interface must not
-         * be able to loop it.
-         */
-        private const val AUTO_INTERFACE_RESTART_COOLDOWN_MS = 60_000L
         internal const val PEER_IDENTITY_BULK_RESTORE_DELAY_MS = 5000L
     }
 
@@ -124,7 +116,7 @@ class ColumbaApplication : Application() {
     lateinit var autoInterfaceWatcher: network.libertychat.app.service.manager.AutoInterfaceWatcher
 
     @Inject
-    lateinit var interfaceConfigManager: network.libertychat.app.service.InterfaceConfigManager
+    lateinit var autoInterfaceRecovery: network.libertychat.app.service.manager.AutoInterfaceRecovery
 
     // Application-level coroutine scope for app-wide operations
     // Uses Dispatchers.Default for background initialization (no main-thread work needed)
@@ -623,99 +615,38 @@ class ColumbaApplication : Application() {
     }
 
     /**
-     * LCS: rebuild the stack when a network interface appears that RNS cannot see.
+     * LCS: keep AutoInterface in step with the device's NICs.
      *
      * RNS's AutoInterface picks its interfaces once, in its constructor, and never
      * adopts a new one. Its four-second `peer_jobs` loop does re-bind an adopted
      * interface whose link-local address changed, so reconnects and AP roams heal
-     * themselves — this is only for the case upstream genuinely cannot recover: a
-     * NIC that did not exist at startup, such as WiFi enabled after launch.
+     * themselves — the gap is a NIC that did not exist at startup, such as WiFi
+     * enabled after launch.
      *
      * Driven off the transport observer's existing flow rather than a second
-     * `ConnectivityManager` callback, so one place decides what a network change is.
-     * [AutoInterfaceWatcher] is what separates "new interface" from ordinary churn;
-     * without that check this would restart the stack on every WiFi/cellular flip.
-     *
-     * The restart is the same `applyInterfaceChanges()` that Settings' "Apply &
-     * Restart" runs, so it is a well-exercised path rather than a bespoke one. It
-     * does drop BLE, RNode and TCP links for a moment, which is why it is gated
-     * this narrowly and rate-limited — a flapping interface must not loop it.
+     * `ConnectivityManager` callback, so one place decides what a network change
+     * is. `AutoInterfaceWatcher` separates "new interface" from ordinary churn, and
+     * `AutoInterfaceRecovery` chooses between reloading the one interface and
+     * restarting the stack.
      */
     private fun startAutoInterfaceRecovery() {
         applicationScope.launch {
-            var lastRestartAt = 0L
             interfaceTransportObserver.currentTransport
                 .collect { transport ->
-                    // AutoInterface defaults to WIFI_ONLY, and applyInterfaceChanges
-                    // filters interfaces by transport before rebuilding. On cellular
-                    // or a VPN-only default, AutoInterface is dropped from the config
-                    // entirely — so a restart there would tear down BLE, RNode and
-                    // TCP to rebuild a stack that still has no AutoInterface in it.
-                    // Only WIFI_LIKE can benefit, and that is also the transport the
-                    // interesting case arrives on: WiFi enabled after launch.
-                    if (transport != CurrentTransport.WIFI_LIKE) return@collect
-
-                    val appeared = autoInterfaceWatcher.newlyAppearedInterfaces()
-                    if (appeared.isEmpty()) return@collect
-
-                    // Skips when a config apply is already running — the user's own
-                    // "Apply & Restart", onboarding, the RNode wizard. Two concurrent
-                    // applies would race to clear the shared is_applying_config flag,
-                    // and whichever finished first would drop the stale-ACTION_STOP
-                    // gate out from under the other.
-                    if (configApplyFlagManager.isApplyingConfig()) {
-                        android.util.Log.d(
-                            "ColumbaApplication",
-                            "New interfaces $appeared but a config apply is in progress; skipping",
-                        )
-                        return@collect
-                    }
-
-                    val now = System.currentTimeMillis()
-                    if (now - lastRestartAt < AUTO_INTERFACE_RESTART_COOLDOWN_MS) {
-                        android.util.Log.d(
-                            "ColumbaApplication",
-                            "New interfaces $appeared but within restart cooldown; skipping",
-                        )
-                        return@collect
-                    }
-
-                    android.util.Log.i(
-                        "ColumbaApplication",
-                        "Restarting Reticulum: AutoInterface cannot see $appeared",
-                    )
                     try {
-                        interfaceConfigManager
-                            .applyInterfaceChanges()
-                            .onFailure { e ->
-                                android.util.Log.w("ColumbaApplication", "AutoInterface recovery restart failed", e)
-                            }
-                    } finally {
-                        // Stamped after the call, not before. An apply can run well
-                        // past this cooldown — its own timeout is 60s for the main
-                        // steps and identity restoration runs outside that — so
-                        // stamping up front would leave the window already expired by
-                        // the time a failed apply returned, and a persistently failing
-                        // apply would retry back to back with no floor at all.
-                        lastRestartAt = System.currentTimeMillis()
+                        autoInterfaceRecovery.recoverIfNeeded(transport)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // Swallowed on purpose. An exception reaching the collector
+                        // would cancel it, and recovery would then be dead for the
+                        // rest of this process's life rather than just this change.
+                        android.util.Log.w("ColumbaApplication", "AutoInterface recovery failed", e)
                     }
                 }
         }
     }
 
-    /**
-     * LCS: flush RNS's path table whenever the app goes to the background.
-     *
-     * Without this, learned routes were effectively never written to disk. RNS only
-     * persists on a 12-hour timer or from its `atexit` handler, and Android kills
-     * the process rather than letting the interpreter exit, so the handler does not
-     * run. [onTerminate] is not a substitute — Android never calls it on a real
-     * device. Backgrounding, by contrast, happens every time the user leaves the
-     * app, and is the last moment we are reliably still alive.
-     *
-     * Fire-and-forget on the IO dispatcher: if the process dies mid-flush we are no
-     * worse off than before, and ON_STOP must not be blocked on a Python call.
-     */
     private fun startPathTablePersistence() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {

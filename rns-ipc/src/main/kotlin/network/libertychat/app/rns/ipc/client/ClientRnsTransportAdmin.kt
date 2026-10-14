@@ -89,6 +89,9 @@ internal class ClientRnsTransportAdmin(
         return bundle.toAnyMap(skip = setOf(BundleKeys.HAS_STATS))
     }
 
+    override suspend fun reloadInterfaceByName(interfaceName: String): Boolean =
+        awaitBool { cb -> remote.reloadInterfaceByName(interfaceName, cb) }
+
     override suspend fun reconnectRNodeInterface() {
         awaitResult { cb -> remote.reconnectRNodeInterface(cb) }
     }

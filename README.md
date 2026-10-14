@@ -88,9 +88,11 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
 - **A network interface that appears after launch is picked up.** RNS's
   AutoInterface adopts its interfaces once at startup, so enabling WiFi after
   launch used to leave local peers invisible until a manual restart. The app now
-  notices a NIC the stack cannot see and rebuilds it. Ordinary churn — a
-  reconnect, an AP roam, a new link-local address — is left alone, because RNS
-  repairs that itself every four seconds.
+  notices a NIC the stack cannot see and reloads just that interface, which
+  re-runs its NIC enumeration while BLE, RNode and TCP links stay up; a full
+  restart is the fallback for when the live reload isn't available. Ordinary
+  churn — a reconnect, an AP roam, a new link-local address — is left alone,
+  because RNS repairs that itself every four seconds.
 - **Learned routes survive a restart.** Transport node is on by default, which
   is what makes RNS load its saved path table at startup — upstream gates that
   load on transport being enabled, so with it off the table was written and never

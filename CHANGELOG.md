@@ -39,6 +39,47 @@ upstream; upstream's own history is not repeated here.
     `peer_jobs` link-local repair are all unchanged between 1.4.2 and 1.5.5.
   - The announce *handler* contract in `event_bridge.py` is unchanged; the two
     are easy to confuse and only the `Interface` callbacks moved.
+- **Picking up a new network interface no longer restarts the stack.** The
+  recovery added in 2.1.1 reloads just AutoInterface now, using RNS 1.5.5's
+  `Reticulum.reload_interface`. That detaches the one interface and
+  re-synthesizes it from its config entry, which for AutoInterface re-runs the
+  constructor — the only thing that makes it re-enumerate NICs. BLE, RNode and
+  TCP links stay up throughout, where previously enabling WiFi after launch tore
+  down every link to rebuild them.
+  - Falls back to the old full `applyInterfaceChanges()` restart when the reload
+    is declined: a `kotlinBackend` build, where reticulum-kt has no live
+    interface management at all; or an AutoInterface that is not attached.
+  - The interface is reloaded under the name it carries in the database, not a
+    hardcoded one, because the user can rename it in Settings. RNS keys its live
+    interfaces by the config section name and `AutoInterface.__init__` stores
+    that as `self.name`, so the two agree.
+  - A reload is used rather than a detach followed by an attach, and that is a
+    safety property rather than a shortcut. `_attach_interface` re-synthesizes
+    with `force_attach=True`, which ignores the entry's `enabled` flag — so an
+    attach could force up an AutoInterface the backend deliberately wrote as
+    `enabled = no` because another RNS app on the device holds the multicast
+    data port, and binding it would take the `:reticulum` process down with
+    `EADDRINUSE`. `_reload_interface` looks the name up in
+    `Transport.interfaces` first and returns early when it is not there, so an
+    interface that was never attached stays down.
+  - Two rate limits instead of one, since the paths no longer cost the same: 10s
+    between reload attempts, enough to stop a flapping NIC driving a
+    detach/attach loop, and the original 60s floor kept for the restart
+    fallback. Skipping a restart on its cooldown deliberately leaves the
+    detection baseline alone, so the next network change retries rather than
+    treating the interface as already adopted.
+  - Declined outright when another RNS app owns the stack as a shared instance:
+    `reload_interface` would forward the request over RPC to *their* instance,
+    where our interface names mean nothing.
+
+### Added
+
+- `RnsTransportAdmin.reloadInterfaceByName(name)` across the backend seam — AIDL
+  surface, both IPC adapters, and both backends. Real on `pythonBackend`;
+  returns false on `kotlinBackend`, which is the fallback signal rather than an
+  error. Note this is distinct from the pre-existing `reloadInterfaces(configs)`,
+  which remains a documented no-op on the python backend: whole-set interface
+  changes still go through the config-rewrite-and-restart path.
 
 ---
 

@@ -131,6 +131,24 @@ interface RnsTransportAdmin {
     // ==================== RNode ====================
 
     /**
+     * LCS: detach and re-attach a single interface by name, without restarting the
+     * stack.
+     *
+     * Backed by RNS >= 1.5.5's `Reticulum.reload_interface`, which detaches the
+     * interface and re-synthesizes it from its existing config entry. For
+     * `AutoInterface` that means a fresh constructor, which is the only way it
+     * re-enumerates network interfaces — it adopts its NICs once at construction
+     * and never extends that set.
+     *
+     * @param interfaceName the RNS interface name, as written to the config file.
+     * @return true if the interface was reloaded; false if the backend does not
+     *         support live interface management, the interface is not attached, or
+     *         the reload failed. Callers that need the interface back should fall
+     *         back to a full restart on false.
+     */
+    suspend fun reloadInterfaceByName(interfaceName: String): Boolean
+
+    /**
      * Attempt to reconnect to the RNode interface.
      * Use this when the RNode has disconnected and automatic reconnection has failed.
      */

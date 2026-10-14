@@ -121,6 +121,31 @@ class RnsBackendIpcRoundTripTest {
     }
 
     @Test
+    fun `interface reload round-trips the name and the result through the stub`() = runTest {
+        // The name has to survive the AIDL hop intact: RNS looks the interface up by
+        // exact name, and the user can rename it, so a dropped or mangled argument
+        // would silently turn every reload into a no-op and send the caller to a
+        // full stack restart instead.
+        val (client, _) = buildClientAndServer()
+        advanceUntilIdle()
+        fake.transportAdminFake.reloadResult = true
+
+        assertEquals(true, client.transportAdmin.reloadInterfaceByName("Mesh Discovery"))
+        assertEquals(listOf("Mesh Discovery"), fake.transportAdminFake.reloadedInterfaceNames)
+    }
+
+    @Test
+    fun `interface reload round-trips a refusal through the stub`() = runTest {
+        // False is the fallback signal, not an error — callers restart the stack on
+        // it, so it must not arrive as true.
+        val (client, _) = buildClientAndServer()
+        advanceUntilIdle()
+        fake.transportAdminFake.reloadResult = false
+
+        assertEquals(false, client.transportAdmin.reloadInterfaceByName("Mesh Discovery"))
+    }
+
+    @Test
     fun `rnodeBattery round-trips a live value through the stub`() = runTest {
         val (client, _) = buildClientAndServer()
         advanceUntilIdle()
@@ -756,6 +781,8 @@ private class FakeRnsNomadnet : RnsNomadnet {
 private class FakeRnsTransportAdmin : RnsTransportAdmin {
     var sharedInstanceAccessConfig: String? = null
     var batteryResult: Int = -1
+    var reloadResult: Boolean = false
+    val reloadedInterfaceNames = mutableListOf<String>()
 
     private val interfaceStatuses = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 8)
 
@@ -777,6 +804,12 @@ private class FakeRnsTransportAdmin : RnsTransportAdmin {
     override suspend fun getDebugInfo(): Map<String, Any> = emptyMap()
     override suspend fun getFailedInterfaces(): List<FailedInterface> = emptyList()
     override suspend fun getInterfaceStats(interfaceName: String): Map<String, Any>? = null
+
+    override suspend fun reloadInterfaceByName(interfaceName: String): Boolean {
+        reloadedInterfaceNames.add(interfaceName)
+        return reloadResult
+    }
+
     override suspend fun reconnectRNodeInterface() {}
     override fun getRNodeRssi(): Int = -100
     override suspend fun getRNodeBattery(): Int = batteryResult

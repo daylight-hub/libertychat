@@ -93,6 +93,13 @@ internal class ServerRnsTransportAdmin(
         }
     }
 
+    override fun reloadInterfaceByName(
+        interfaceName: String,
+        cb: IRnsBoolCallback,
+    ) = dispatchBool(cb, scope) {
+        impl.reloadInterfaceByName(interfaceName)
+    }
+
     override fun reconnectRNodeInterface(cb: IRnsResultCallback) =
         dispatch(cb, scope) { impl.reconnectRNodeInterface(); Bundle.EMPTY }
 

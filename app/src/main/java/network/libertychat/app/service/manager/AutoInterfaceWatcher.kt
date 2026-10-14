@@ -36,13 +36,16 @@ import javax.inject.Singleton
  *
  * Takes a snapshot of the adoptable interfaces whenever the backend starts, and
  * reports any that have appeared since. Detection is deliberately all on the Java
- * side: it needs no new IPC surface and no reaching into RNS internals, and the
- * recovery it triggers is the same `applyInterfaceChanges()` restart that the
- * Settings "Apply & Restart" button already performs in production.
+ * side: it needs no new IPC surface and no reaching into RNS internals.
+ *
+ * This class only detects. [AutoInterfaceRecovery] acts on what it reports —
+ * normally by reloading the one interface in place, and only falling back to the
+ * `applyInterfaceChanges()` restart that Settings' "Apply & Restart" performs.
  *
  * The filter deliberately errs on the strict side of AutoInterface's own rules —
- * see [isAdoptable] — because a false positive costs a full stack restart while a
- * false negative only costs a recovery on an interface that carries no local peers.
+ * see [isAdoptable] — because a false positive costs a detach and re-attach of
+ * AutoInterface, or in the fallback case a whole stack restart, while a false
+ * negative only costs a recovery on an interface that carries no local peers.
  */
 @Singleton
 class AutoInterfaceWatcher
@@ -102,7 +105,8 @@ class AutoInterfaceWatcher
 
         /**
          * Record the interfaces RNS can be assumed to have adopted. Call this right
-         * after the backend finishes initializing, and again after any restart.
+         * after the backend finishes initializing, after any restart, and after a
+         * live reload of AutoInterface — all three re-run its NIC enumeration.
          */
         fun snapshot() {
             val current = adoptableProvider()

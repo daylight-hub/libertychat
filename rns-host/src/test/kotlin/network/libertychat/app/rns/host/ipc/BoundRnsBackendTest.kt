@@ -372,6 +372,7 @@ class BoundRnsBackendTest {
         override suspend fun getDebugInfo() = emptyMap<String, Any>()
         override suspend fun getFailedInterfaces(): List<FailedInterface> = emptyList()
         override suspend fun getInterfaceStats(interfaceName: String) = null
+        override suspend fun reloadInterfaceByName(interfaceName: String) = false
         override suspend fun reconnectRNodeInterface() {}
         override fun getRNodeRssi(): Int = rssi
         override suspend fun getRNodeBattery(): Int = -1

@@ -34,6 +34,10 @@ oneway interface IRnsTransportAdmin {
     void setAutoconnectLimit(int count, in IRnsResultCallback cb);
     void setAutoconnectIfacOnly(boolean enabled, in IRnsResultCallback cb);
 
+    // LCS: live single-interface reload (RNS >= 1.5.5). Bool result: false when
+    // unsupported, not attached, or the reload failed.
+    void reloadInterfaceByName(String interfaceName, in IRnsBoolCallback cb);
+
     // ==================== RNS 1.1.x Interface Discovery ====================
 
     void getDiscoveredInterfaces(in IRnsResultCallback cb);

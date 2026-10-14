@@ -336,6 +336,83 @@ class PythonRnsTransportAdmin(
 
     // ==================== RNode ====================
 
+    /**
+     * LCS: live single-interface reload via RNS >= 1.5.5's
+     * `Reticulum.reload_interface`.
+     *
+     * `_reload_interface` detaches the named interface and re-attaches it by
+     * re-reading its entry from the config file and re-synthesizing it. For
+     * `AutoInterface` that re-runs the constructor, which is the only thing that
+     * makes it re-enumerate NICs — it adopts them once at construction and never
+     * extends the set. So this replaces a whole-stack restart with a surgical
+     * rebuild of the one interface that needs it, leaving BLE, RNode and TCP links
+     * untouched.
+     *
+     * Interface management is enabled by default in RNS (only an explicit
+     * `enable_interface_management = no` in the config turns it off), so nothing
+     * extra has to be written to the config for this to work.
+     *
+     * [interfaceName] is the config section name, which is also what RNS keys its
+     * live interfaces by: `_reload_interface` looks the name up in
+     * `{ iface.name: iface for iface in Transport.interfaces }`, and
+     * `AutoInterface.__init__` stores the section name as `self.name`. So the name
+     * the user gave the interface in Settings is the right key.
+     *
+     * Declined when another RNS app on this device owns the stack. In that case
+     * `reload_interface` forwards the request over RPC to *their* instance, where
+     * our interface names mean nothing — so we would be asking a foreign stack to
+     * rebuild an interface of its own. Not ours to manage.
+     *
+     * Returns false rather than throwing when the API is missing — which is what a
+     * pre-1.5.5 pin would look like, where `reload_interface` is a stub that
+     * returns None — so callers can fall back to a full restart.
+     */
+    override suspend fun reloadInterfaceByName(interfaceName: String): Boolean =
+        pyCall {
+            val instance = runtime.reticulumInstance
+            val ownedElsewhere =
+                instance?.get("is_connected_to_shared_instance")
+                    ?.toJava(Boolean::class.javaObjectType) ?: false
+
+            if (instance == null || interfaceName.isBlank() || ownedElsewhere) {
+                Log.d(
+                    TAG,
+                    "Not reloading '$interfaceName': stack not running, name blank, " +
+                        "or owned by another RNS app (shared instance)",
+                )
+                return@pyCall false
+            }
+
+            // _reload_interface returns True on success, False or None on a
+            // refusal: management disabled, an I2P or local interface, a failed
+            // detach or re-attach, or — the common one here — a name that is not
+            // currently attached.
+            //
+            // That last case is what makes this safe to call blind. The re-attach
+            // runs `_synthesize_interface(force_attach=True)`, which ignores the
+            // entry's `enabled` flag, so an attach on its own could force up an
+            // AutoInterface the backend deliberately wrote as `enabled = no`
+            // because another RNS app holds the multicast data port — and binding
+            // it would take this process down with EADDRINUSE. A *reload* cannot:
+            // it looks the name up in `Transport.interfaces` first and returns
+            // None when it is not there, so an interface that was never attached
+            // stays that way. Hence reload rather than detach + attach.
+            val reloaded =
+                runCatching { instance.callAttr("reload_interface", interfaceName) }
+                    .map { it?.toJava(Boolean::class.javaObjectType) ?: false }
+                    .getOrElse { e ->
+                        Log.w(TAG, "reload_interface unavailable or failed for '$interfaceName'", e)
+                        false
+                    }
+
+            if (reloaded) {
+                Log.i(TAG, "Reloaded interface '$interfaceName' without restarting the stack")
+            } else {
+                Log.w(TAG, "RNS declined to reload interface '$interfaceName'")
+            }
+            reloaded
+        }
+
     override suspend fun reconnectRNodeInterface() {
         // Documented no-op. RNode-over-python (the python `rnode_interface.py`
         // RNS.Interface adapter + USB/BLE bring-up) is an on-device follow-up;
