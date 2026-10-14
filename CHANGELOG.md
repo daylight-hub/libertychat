@@ -9,6 +9,39 @@ upstream; upstream's own history is not repeated here.
 
 ---
 
+## 2.2.0 — unreleased
+
+### Changed
+
+- **Python RNS bumped 1.4.2 → 1.5.5**, with ble-reticulum co-bumped 0.2.2 →
+  0.2.3. Brings live interface attach/detach/reload, a prioritised inbound
+  queue, in-flight path-request batching, roughly 90x faster IFAC and
+  announce-signature caching (which matters under announce storms), plus RNode
+  BLE reconnect reliability fixes.
+  - **The announce-callback signature fixes are part of the bump, not optional.**
+    RNS 1.5.0 added a leading `size=0` to four `RNS.Interface` callbacks, and
+    1.5.x `Transport` calls the announce pair by keyword —
+    `sent_announce(size=len(raw))`. Our two RNode interfaces override that pair,
+    so on the old signatures *every announce sent or received over an RNode*
+    would raise `TypeError` and be dropped: peer discovery would die on real
+    hardware, presenting as a radio fault rather than a signature mismatch.
+    `columba_rnode_interface.py` now delegates to `RNS.Interface`, which also
+    restores the announce byte counters the interface-stats RPC reads and the
+    spawned-interface propagation that the hand-rolled override had silently
+    dropped; `rnode_interface.py` is duck-typed rather than a subclass, so it
+    accepts the parameter and ignores it.
+  - **ble-reticulum had to move in lockstep.** RNS ≥ 1.5.2 reads
+    `interface.ifac_size` on every inbound packet, and 0.2.2's spawned BLE peer
+    interface never inherited it — every inbound packet would have raised
+    `AttributeError` and no BLE announce would ever have been ingested.
+  - `AutoInterfaceWatcher`'s assumptions were re-verified against the new pin:
+    the ignore lists, the init-only `adopted_interfaces` write and the
+    `peer_jobs` link-local repair are all unchanged between 1.4.2 and 1.5.5.
+  - The announce *handler* contract in `event_bridge.py` is unchanged; the two
+    are easy to confuse and only the `Interface` callbacks moved.
+
+---
+
 ## 2.1.1 — 2026-10-14
 
 ### Fixed

@@ -116,6 +116,6 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
 | Component | Version |
 |---|---|
 | Columba | 2.0.9 (fork base) |
-| RNS (Python) | 1.4.2 — `torlando-tech/Reticulum`, pinned commit |
+| RNS (Python) | 1.5.5 — `torlando-tech/Reticulum`, pinned commit |
 | LXMF (Python) | 1.1.0 — `torlando-tech/LXMF`, pinned commit |
 | LXST | LXST-kt `v0.0.4` (Kotlin; no Python LXST) |

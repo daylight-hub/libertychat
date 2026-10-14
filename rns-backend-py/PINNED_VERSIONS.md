@@ -17,9 +17,9 @@ moved into the Gradle build script).
 
 | Package | Ref | Pinned to | Notes |
 |---|---|---|---|
-| `rns` (Reticulum) | `git+https://github.com/torlando-tech/Reticulum` | **`5b3a6ee4f25e2925cf84d4a2b108e6a708fbd395`** (SHA ✓) | RNS 1.4.2 with socket cleanup, narrow PHY-stats RPC backoff, ratchet file-handle fixes, and deterministic AutoInterface listener/peer teardown. The former known-destinations recombine migration is obsolete in 1.4.2: recombination is ignored and the retained load path already migrates legacy four-field entries. |
+| `rns` (Reticulum) | `git+https://github.com/torlando-tech/Reticulum` | **`3759488eba880489562268d9a1a993f443d1b8bd`** (SHA ✓) | RNS 1.5.5 with socket cleanup, narrow PHY-stats RPC backoff, ratchet file-handle fixes, and deterministic AutoInterface listener/peer teardown. Brings live `Reticulum.attach_interface`/`detach_interface`/`reload_interface`, a prioritised inbound queue, in-flight path-request batching, ~90x faster IFAC, and announce-signature caching. **Requires the announce-callback signature fixes — see below.** |
 | `lxmf` (LXMF) | `git+https://github.com/torlando-tech/LXMF` | **`8912186e48b482a76bf04e2ac4b6c8940991aecc`** (SHA ✓) | LXMF 1.1.0 with validated external native stamping, cooperative cancellation and stale-result rejection, plus `receiving_interface` and `receiving_hops` on opportunistic delivery. |
-| `ble-reticulum` | `git+https://github.com/torlando-tech/ble-reticulum.git` | **`07d941304c9a1dc3a8e58087b3b974ff3d229e56`** (SHA ✓) | Provides `BLEInterface` + `bluetooth_driver` that the bundled `ble_modules/` adapters subclass. SHA is the tip of `main` as of 2026-05-14; builds as `ble-reticulum-0.2.2`. |
+| `ble-reticulum` | `git+https://github.com/torlando-tech/ble-reticulum.git` | **`63557acfe5c923dcdafeb7bc37508bf835f16514`** (SHA ✓) | Provides `BLEInterface` + `bluetooth_driver` that the bundled `ble_modules/` adapters subclass; builds as `ble-reticulum-0.2.3`. **Must move in lockstep with RNS ≥ 1.5.2** — see below. |
 | `cryptography` | PyPI | `>=42.0.0` | Range, not pinned — Chaquopy resolves a native wheel for the target ABI. Acceptable: it's a well-tested transitive dep, not a protocol-correctness surface. |
 | `u-msgpack-python` | PyPI | unpinned | Sideband-compatible telemetry + LXST signalling wire format. Pure-Python, stable API. |
 
@@ -68,3 +68,51 @@ integration task (BLE is not on the Phase B verification checklist). When that
 work happens, either `PythonRnsRuntime` grows an interface-deployment step or
 the `from drivers.android_ble_driver import` line is repointed at
 `ble_modules.android_ble_driver`.
+
+## LCS: two couplings to respect when bumping RNS
+
+### The announce-callback signatures are load-bearing
+
+RNS 1.5.0 added a leading `size=0` to four `RNS.Interface` callbacks —
+`sent_announce`, `received_announce`, `sent_path_request`,
+`received_path_request` — and 1.5.x `Transport` calls the announce pair **by
+keyword**:
+
+```python
+interface.sent_announce(size=len(raw))                          # Transport.py
+packet.receiving_interface.received_announce(size=len(packet.raw))
+```
+
+Our two RNode interfaces override the announce pair, so the 1.4.x signatures
+raise `TypeError` on **every announce sent or received over an RNode**. The
+announce is dropped, peer discovery dies on real hardware, and it presents as a
+radio fault rather than a signature mismatch. Both are fixed:
+
+- `src/main/python/columba_rnode_interface.py` subclasses `RNS.Interface`, so it
+  now delegates to `super()`. That also restores the `atxc`/`atxb`/`arxc`/`arxb`
+  counters the interface-stats RPC reads and the `from_spawned=True` propagation
+  to a parent interface, both of which the hand-rolled override silently dropped.
+- `src/main/python/rnode_interface.py` is duck-typed rather than an
+  `RNS.Interface` subclass, so it accepts `size` and ignores it; the frequency
+  deque is all its stats path reads.
+
+The announce **handler** contract (`received_announce(destination_hash,
+announced_identity, app_data, …)` in `event_bridge.py`) is unchanged — do not
+confuse the two.
+
+### ble-reticulum must co-bump with RNS ≥ 1.5.2
+
+1.5.2 reads `interface.ifac_size` on every inbound packet. ble-reticulum 0.2.2's
+spawned BLE peer interface never inherited that attribute, so every inbound
+packet raises `AttributeError` and no BLE announce is ever ingested. 0.2.3 fixes
+it, and also carries `announce_rate_grace`/`announce_rate_penalty` for the stats
+RPC plus a scanner-wedge health check.
+
+### Before trusting `AutoInterfaceWatcher` on a future bump
+
+`app/.../service/manager/AutoInterfaceWatcher.kt` mirrors
+`AutoInterface.__init__`'s adoption rules and relies on adoption being
+init-only, with `peer_jobs` repairing only a changed link-local address. Verified
+true on both 1.4.2 and 1.5.5 — the ignore lists, the `adopted_interfaces` write
+site and the `peer_jobs` repair are unchanged across them. Re-check
+`RNS/Interfaces/AutoInterface.py` on any further bump.

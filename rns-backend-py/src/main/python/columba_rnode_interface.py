@@ -1635,13 +1635,26 @@ class ColumbaRNodeInterface(Interface):
                 RNS.log(f"Error processing held announce: {e}", RNS.LOG_ERROR)
         self.held_announces = []
 
-    def sent_announce(self, from_spawned=False):
-        """Called when an announce is sent on this interface. Tracks announce frequency."""
-        self.oa_freq_deque.append(time.time())
+    def sent_announce(self, size=0, from_spawned=False):
+        """Called when an announce is sent on this interface.
 
-    def received_announce(self):
-        """Called when an announce is received on this interface. Tracks announce frequency."""
-        self.ia_freq_deque.append(time.time())
+        LCS: delegates to `RNS.Interface` rather than reimplementing. Two reasons.
+        RNS 1.5.x calls this as `sent_announce(size=len(raw))`, so the old
+        signature raised TypeError on every announce and dropped it. And the base
+        does more than the frequency deque this used to touch: it credits the
+        announce counters and byte totals (atxc/atxb) that the interface-stats RPC
+        reports, and forwards to `parent_interface` with `from_spawned=True` when
+        this interface was spawned. Reimplementing silently lost both.
+        """
+        super().sent_announce(size=size, from_spawned=from_spawned)
+
+    def received_announce(self, size=0, from_spawned=False):
+        """Called when an announce is received on this interface.
+
+        LCS: delegates to `RNS.Interface` — see [sent_announce]. The base credits
+        arxc/arxb and appends to the incoming frequency deque.
+        """
+        super().received_announce(size=size, from_spawned=from_spawned)
 
     def should_ingress_limit(self):
         """Check if ingress limiting should be applied. Required by RNS Transport."""

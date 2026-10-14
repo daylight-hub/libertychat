@@ -1173,12 +1173,26 @@ class ColumbaRNodeInterface:
                 RNS.log(f"Error processing held announce: {e}", RNS.LOG_ERROR)
         self.held_announces = []
 
-    def sent_announce(self, from_spawned=False):
-        """Called when an announce is sent on this interface. Tracks announce frequency."""
+    def sent_announce(self, size=0, from_spawned=False):
+        """Called when an announce is sent on this interface. Tracks announce frequency.
+
+        LCS: `size` is accepted and ignored. RNS 1.5.x calls this as
+        `sent_announce(size=len(raw))` (Transport.py), so without the parameter
+        every announce sent over an RNode raised TypeError and was dropped —
+        which looks like a radio fault rather than a signature mismatch. This
+        class is duck-typed rather than an `RNS.Interface` subclass, so there are
+        no atxc/atxb byte counters here to credit the size to; the frequency
+        deque is all the stats path reads from it.
+        """
         self.oa_freq_deque.append(time.time())
 
-    def received_announce(self):
-        """Called when an announce is received on this interface. Tracks announce frequency."""
+    def received_announce(self, size=0, from_spawned=False):
+        """Called when an announce is received on this interface. Tracks announce frequency.
+
+        LCS: `size` accepted and ignored, and `from_spawned` added — see
+        [sent_announce]. 1.5.x calls this as `received_announce(size=...)`, and
+        `RNS.Interface` propagates to a parent with `from_spawned=True`.
+        """
         self.ia_freq_deque.append(time.time())
 
     def should_ingress_limit(self):

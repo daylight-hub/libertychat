@@ -57,7 +57,7 @@ android {
         // in PINNED_VERSIONS.md, not the user-facing version line). RNS and LXMF
         // ARE torlando-tech forks of markqvist's upstream; ble-reticulum is
         // torlando-tech's own project, so it carries no "fork" label.
-        buildConfigField("String", "PY_RNS_VERSION", "\"1.4.2 (torlando-tech fork)\"")
+        buildConfigField("String", "PY_RNS_VERSION", "\"1.5.5 (torlando-tech fork)\"")
         buildConfigField("String", "PY_LXMF_VERSION", "\"1.1.0 (torlando-tech fork)\"")
         buildConfigField("String", "PY_BLE_RETICULUM_VERSION", "\"0.2.2\"")
     }
@@ -99,15 +99,22 @@ chaquopy {
         version = "3.11"
 
         pip {
-            // Upstream RNS 1.4.2 — torlando-tech fork pinned to commit SHA. The
+            // Upstream RNS 1.5.5 — torlando-tech fork pinned to commit SHA. The
             // fork retains socket cleanup, PHY-stats RPC backoff, ratchet
             // file-handle fixes, and deterministic AutoInterface teardown. The
-            // old known-destinations recombine patch is
-            // obsolete because 1.4.2 ignores recombine and migrates on load. The
-            // v0.10.x `patches/RNS/` tree is
-            // intentionally NOT restored (its runtime patch-deployer lived in
-            // the deleted reticulum_wrapper.py — see PINNED_VERSIONS.md).
-            install("git+https://github.com/torlando-tech/Reticulum@5b3a6ee4f25e2925cf84d4a2b108e6a708fbd395")
+            // v0.10.x `patches/RNS/` tree is intentionally NOT restored (its
+            // runtime patch-deployer lived in the deleted reticulum_wrapper.py —
+            // see PINNED_VERSIONS.md).
+            //
+            // LCS: bumping from 1.4.2 REQUIRES the announce-callback signature
+            // fixes in rnode_interface.py and columba_rnode_interface.py. 1.5.x
+            // calls `sent_announce(size=…)` / `received_announce(size=…)` by
+            // keyword, and the 1.4.x signatures raise TypeError on every announce
+            // over an RNode — silently killing peer discovery on real hardware.
+            // Brings live interface attach/detach/reload, a prioritised inbound
+            // queue, in-flight path-request batching, ~90x faster IFAC and
+            // announce-signature caching.
+            install("git+https://github.com/torlando-tech/Reticulum@3759488eba880489562268d9a1a993f443d1b8bd")
 
             // Upstream LXMF 1.1.0 — torlando-tech fork (external stamp generator
             // plus validated/cancellable native stamping and opportunistic
@@ -115,9 +122,15 @@ chaquopy {
             // the versioned successor branch's commit SHA for reproducibility.
             install("git+https://github.com/torlando-tech/LXMF@8912186e48b482a76bf04e2ac4b6c8940991aecc")
 
-            // ble-reticulum — RNS.Interface subclass for the Android BLE bridge.
-            // Pinned to the commit SHA at the tip of main for reproducibility.
-            install("git+https://github.com/torlando-tech/ble-reticulum.git@07d941304c9a1dc3a8e58087b3b974ff3d229e56")
+            // ble-reticulum 0.2.3 — RNS.Interface subclass for the Android BLE
+            // bridge. Pinned to a commit SHA for reproducibility.
+            //
+            // LCS: this co-bump is NOT optional with RNS >= 1.5.2. That release
+            // reads `interface.ifac_size` on every inbound packet, and 0.2.2's
+            // spawned BLE peer interface never inherited the attribute — every
+            // inbound packet would raise AttributeError and no BLE announce would
+            // ever be ingested.
+            install("git+https://github.com/torlando-tech/ble-reticulum.git@63557acfe5c923dcdafeb7bc37508bf835f16514")
 
             install("cryptography>=42.0.0")
 
