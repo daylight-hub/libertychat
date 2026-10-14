@@ -40,15 +40,53 @@ upstream; upstream's own history is not repeated here.
   shared-instance client — another RNS app on the device owning the stack — since
   RNS gates both the save and the load on the instance not being a shared client.
 
+- **A network interface that appears after launch is now picked up.** Starting
+  with WiFi off and enabling it later left local peers invisible until the stack
+  was restarted by hand. `ReticulumService`'s network-change callback was written
+  to fix exactly this — its comment said so — but the `binder.restartAutoInterface()`
+  it called was `= Unit`, and had been since the native-mode port. Python RNS
+  cannot hot-add an interface in any case: `AutoInterface` enumerates and adopts
+  its NICs once, in its constructor, and nothing ever extends that set.
+  - Recovery now lives in the main process, where the config and the restart
+    machinery already are. `AutoInterfaceWatcher` snapshots the adoptable
+    interfaces when the backend starts and reports any that appear later;
+    `ColumbaApplication` then runs the same `applyInterfaceChanges()` restart that
+    Settings' "Apply & Restart" performs.
+  - **Ordinary network churn does not trigger it.** A reconnect, an AP roam or a
+    new link-local address on an interface RNS already adopted is repaired by
+    RNS's own `peer_jobs` loop every four seconds — it swaps the address, closes
+    the old UDP listener and binds a new one. Only a genuinely unseen NIC causes a
+    rebuild, and it is rate-limited to one a minute, because a restart briefly
+    drops BLE, RNode and TCP links too. It also stands down while any other config
+    apply is running, so it cannot race the user's own "Apply & Restart".
+  - **Only on WiFi-like transports.** AutoInterface is a `WIFI_ONLY` interface, so
+    an apply on cellular or a VPN-only default rebuilds the stack *without* it —
+    a restart there would drop every link to achieve nothing. Recovery therefore
+    runs only when the current transport is WiFi or Ethernet.
+  - The watcher's filter is deliberately **stricter** than `AutoInterface`'s own
+    rules. Upstream's Android ignore list stops at literal `rmnet0`..`rmnet7`,
+    which misses how modern devices actually name cellular (`rmnet_dataN` on
+    Qualcomm, `ccmniN` on MediaTek, plus extra PDNs appearing at runtime) and
+    misses VPNs beyond `tun0` (`wg0`, `tun1`). Matching upstream exactly would
+    have made ordinary cellular and VPN transitions look like new interfaces. Those
+    families carry no local peers, so excluding them costs nothing.
+  - Known limitation: detection is driven by the transport observer, which only
+    reports changes of transport *class*. An interface appearing while the class is
+    unchanged — a dock's Ethernet coming up while already on WiFi, or a hotspot or
+    WiFi Direct interface — is not noticed until the next transport change.
+- Removed the `restartAutoInterface()` no-op from `ReticulumServiceBinder` now
+  that nothing calls it, rather than leaving a method whose name claims it does
+  something.
+
 ### Changed
 
 - Corrected the upstream stack table in the README: the Python stack is RNS
   **1.4.2** and LXMF **1.1.0**, matching the pinned commits in
   `rns-backend-py/build.gradle.kts`. It had read 1.1.9 / 0.9.2.
 - Dropped the claim in `rns-backend-py/ARCHITECTURE.md` that AutoInterface
-  hot-add is implemented in Kotlin in `:rns-host`. It is not — the
-  `restartAutoInterface()` hook that the network-change callback invokes is a
-  documented no-op.
+  hot-add is implemented in Kotlin in `:rns-host`. It never was: the
+  `restartAutoInterface()` hook the network-change callback invoked was a no-op,
+  and it has now been removed outright in favour of the recovery above.
 
 ---
 

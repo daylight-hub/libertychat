@@ -85,6 +85,12 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
   propagation node prompts a path request for the node rather than the peer. The
   ladder is send → on direct failure ask about the peer and fall back to the
   propagation node → on that failure ask about the node.
+- **A network interface that appears after launch is picked up.** RNS's
+  AutoInterface adopts its interfaces once at startup, so enabling WiFi after
+  launch used to leave local peers invisible until a manual restart. The app now
+  notices a NIC the stack cannot see and rebuilds it. Ordinary churn — a
+  reconnect, an AP roam, a new link-local address — is left alone, because RNS
+  repairs that itself every four seconds.
 - **Learned routes survive a restart.** Transport node is on by default, which
   is what makes RNS load its saved path table at startup — upstream gates that
   load on transport being enabled, so with it off the table was written and never

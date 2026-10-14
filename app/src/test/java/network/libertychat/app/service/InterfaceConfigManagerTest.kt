@@ -68,6 +68,15 @@ class InterfaceConfigManagerTest {
     private lateinit var transportObserver: network.libertychat.app.service.manager.InterfaceTransportObserver
     private lateinit var applicationScope: CoroutineScope
 
+    /**
+     * Real instance rather than a mock: it has no dependencies, and substituting its
+     * enumeration keeps it off the host's actual network interfaces.
+     */
+    private val autoInterfaceWatcher =
+        network.libertychat.app.service.manager.AutoInterfaceWatcher().apply {
+            adoptableProvider = { emptySet() }
+        }
+
     private lateinit var manager: InterfaceConfigManager
     private lateinit var sharedPrefs: SharedPreferences
     private lateinit var sharedPrefsEditor: SharedPreferences.Editor
@@ -183,6 +192,7 @@ class InterfaceConfigManagerTest {
                 identityResolutionManager = identityResolutionManager,
                 propagationNodeManager = propagationNodeManager,
                 transportObserver = transportObserver,
+                autoInterfaceWatcher = autoInterfaceWatcher,
                 applicationScope = applicationScope,
             )
     }
@@ -503,6 +513,7 @@ class InterfaceConfigManagerTest {
                     identityResolutionManager = identityResolutionManager,
                     propagationNodeManager = propagationNodeManager,
                     transportObserver = transportObserver,
+                    autoInterfaceWatcher = autoInterfaceWatcher,
                     applicationScope = applicationScope,
                 )
 
@@ -570,6 +581,7 @@ class InterfaceConfigManagerTest {
                     identityResolutionManager = identityResolutionManager,
                     propagationNodeManager = propagationNodeManager,
                     transportObserver = transportObserver,
+                    autoInterfaceWatcher = autoInterfaceWatcher,
                     applicationScope = applicationScope,
                 )
 
@@ -616,6 +628,7 @@ class InterfaceConfigManagerTest {
                     identityResolutionManager = identityResolutionManager,
                     propagationNodeManager = propagationNodeManager,
                     transportObserver = transportObserver,
+                    autoInterfaceWatcher = autoInterfaceWatcher,
                     applicationScope = applicationScope,
                 )
 
@@ -656,6 +669,7 @@ class InterfaceConfigManagerTest {
                     identityResolutionManager = identityResolutionManager,
                     propagationNodeManager = propagationNodeManager,
                     transportObserver = transportObserver,
+                    autoInterfaceWatcher = autoInterfaceWatcher,
                     applicationScope = applicationScope,
                 )
 
@@ -697,6 +711,7 @@ class InterfaceConfigManagerTest {
                     identityResolutionManager = identityResolutionManager,
                     propagationNodeManager = propagationNodeManager,
                     transportObserver = transportObserver,
+                    autoInterfaceWatcher = autoInterfaceWatcher,
                     applicationScope = applicationScope,
                 )
 
@@ -755,6 +770,7 @@ class InterfaceConfigManagerTest {
                     identityResolutionManager = identityResolutionManager,
                     propagationNodeManager = propagationNodeManager,
                     transportObserver = transportObserver,
+                    autoInterfaceWatcher = autoInterfaceWatcher,
                     applicationScope = applicationScope,
                 )
 

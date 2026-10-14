@@ -23,12 +23,6 @@ class ReticulumServiceBinder(
     fun isInitialized(): Boolean = state.isInitialized()
 
     /**
-     * No-op in native mode — AutoInterface is managed by NativeReticulumProtocol in the
-     * app process. Kept so ReticulumService's onNetworkChanged callback continues to compile.
-     */
-    fun restartAutoInterface() = Unit
-
-    /**
      * No-op in native mode — announces are emitted by NativeReticulumProtocol in the
      * app process. Kept so ReticulumService's onNetworkChanged callback continues to compile.
      */

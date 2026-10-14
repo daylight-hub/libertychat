@@ -60,6 +60,7 @@ class InterfaceConfigManager
         private val identityKeyProvider: network.libertychat.app.data.crypto.IdentityKeyProvider,
         private val conversationRepository: ConversationRepository,
         private val messageCollector: MessageCollector,
+        private val autoInterfaceWatcher: network.libertychat.app.service.manager.AutoInterfaceWatcher,
         private val database: ColumbaDatabase,
         private val settingsRepository: SettingsRepository,
         private val autoAnnounceManager: AutoAnnounceManager,
@@ -439,6 +440,14 @@ class InterfaceConfigManager
                 identityResolutionManager.start(applicationScope)
                 propagationNodeManager.start()
                 Log.d(TAG, "✓ AutoAnnounceManager, IdentityResolutionManager, PropagationNodeManager started")
+
+                // LCS: re-baseline the AutoInterface watcher. RNS has just
+                // re-enumerated and adopted whatever interfaces are present, so this
+                // has to happen for every apply — not only the recovery-initiated
+                // ones. Without it, a user's own "Apply & Restart" that picked up a
+                // new interface would leave the watcher's snapshot stale, and the
+                // next transport change would fire a second, pointless restart.
+                autoInterfaceWatcher.snapshot()
 
                 Log.i(TAG, "==== Configuration Changes Applied Successfully ====")
                 Unit // Hint inference: function return is Result<Unit>, not Result<Int> from Log.i.

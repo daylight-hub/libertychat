@@ -88,8 +88,8 @@ class ReticulumService : Service() {
 
     // Local binder returned from onBind() — liveness handle only, no protocol calls.
     // Retained internally so existing managers (BleCoordinator, NetworkChangeManager
-    // callbacks below) can call binder.restartAutoInterface() / announceLxmfDestination() /
-    // shutdown() / isInitialized() through the legacy in-process Java surface. A.10
+    // callbacks below) can call binder.announceLxmfDestination() / shutdown() /
+    // isInitialized() through the legacy in-process Java surface. A.10
     // routes those calls through `rnsBackend` directly and deletes this property.
     private lateinit var binder: ReticulumServiceBinder
 
@@ -128,11 +128,12 @@ class ReticulumService : Service() {
                 context = this,
                 scope = serviceScope,
                 onNetworkChanged = {
-                    // Trigger AutoInterface hot-add + LXMF announce when network changes.
+                    // Announce on a network change so peers hear us on the new network.
+                    // AutoInterface recovery is NOT done here — see the note below.
                     // CRITICAL: Run in coroutine scope to avoid blocking the ConnectivityManager
                     // callback thread. Blocking that thread can cause Android's watchdog to kill
                     // the service, leading to "Service not bound" errors.
-                    Log.d(TAG, "Network changed - restarting AutoInterface and triggering LXMF announce")
+                    Log.d(TAG, "Network changed - triggering LXMF announce")
                     // Guard: binder property must be initialized AND Reticulum must be ready
                     // This prevents announces during service initialization, which can cause
                     // DataStore race conditions and service crashes
@@ -140,11 +141,19 @@ class ReticulumService : Service() {
                         serviceScope.launch {
                             try {
                                 withTimeout(10_000L) {
-                                    // Hot-add any new network interfaces to AutoInterface FIRST,
-                                    // so the subsequent announce goes out on the new interface.
-                                    // This fixes the bug where starting without WiFi and later
-                                    // connecting never discovers AutoInterface peers.
-                                    binder.restartAutoInterface()
+                                    // LCS: `restartAutoInterface()` used to be called here, with
+                                    // a comment claiming it fixed "starting without WiFi and
+                                    // later connecting never discovers AutoInterface peers". It
+                                    // never did: the method is `= Unit`, and python RNS cannot
+                                    // hot-add an interface anyway — AutoInterface adopts its NICs
+                                    // once, in its constructor.
+                                    //
+                                    // That recovery now lives in the main process, where the
+                                    // config and the restart machinery are: AutoInterfaceWatcher
+                                    // spots a NIC that RNS cannot see and ColumbaApplication
+                                    // drives the same applyInterfaceChanges() restart that
+                                    // "Apply & Restart" uses. All that is left here is the
+                                    // announce, so peers hear us on the new network.
                                     binder.announceLxmfDestination()
                                 }
                                 // Signal main app's AutoAnnounceManager to reset its timer
@@ -460,8 +469,8 @@ class ReticulumService : Service() {
         // and reaches the backend through the typed RnsBackend / sub-interface
         // surface. The legacy `binder` field above is still constructed (in
         // onCreate) because in-process service managers (NetworkChangeManager,
-        // BleCoordinator) call its `restartAutoInterface` / `announceLxmfDestination`
-        // helpers via direct Java calls — A.10 rewires those to use `rnsBackend`.
+        // BleCoordinator) call its `announceLxmfDestination` helper via direct Java
+        // calls — A.10 rewires those to use `rnsBackend`.
         return aidlServer ?: RnsBackendServer(
             impl = rnsBackend,
             scope = serviceScope,

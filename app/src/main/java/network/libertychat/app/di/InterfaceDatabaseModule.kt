@@ -125,6 +125,7 @@ object InterfaceDatabaseModule {
         identityResolutionManager: IdentityResolutionManager,
         propagationNodeManager: PropagationNodeManager,
         transportObserver: network.libertychat.app.service.manager.InterfaceTransportObserver,
+        autoInterfaceWatcher: network.libertychat.app.service.manager.AutoInterfaceWatcher,
         @ApplicationScope applicationScope: CoroutineScope,
     ): InterfaceConfigManager =
         InterfaceConfigManager(
@@ -142,6 +143,7 @@ object InterfaceDatabaseModule {
             identityResolutionManager = identityResolutionManager,
             propagationNodeManager = propagationNodeManager,
             transportObserver = transportObserver,
+            autoInterfaceWatcher = autoInterfaceWatcher,
             applicationScope = applicationScope,
         )
 }
