@@ -85,6 +85,15 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
   propagation node prompts a path request for the node rather than the peer. The
   ladder is send → on direct failure ask about the peer and fall back to the
   propagation node → on that failure ask about the node.
+- **Learned routes survive a restart.** Transport node is on by default, which
+  is what makes RNS load its saved path table at startup — upstream gates that
+  load on transport being enabled, so with it off the table was written and never
+  read back. The app also flushes the table when it goes to the background, since
+  RNS's own persistence otherwise only fires on a 12-hour timer or an `atexit`
+  handler that Android never runs. The trade is that the device also routes
+  traffic for other peers; it can be turned off in Settings, at the price of
+  losing routes on every restart. Does not apply when another RNS app on the
+  device owns the stack as a shared instance.
 - **Request path** in the chat's three-dot menu, for asking on demand — when a
   repeater has just come back up, say, rather than waiting for the automatic
   attempt. A deliberate tap bypasses the rate limit.
@@ -101,6 +110,6 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
 | Component | Version |
 |---|---|
 | Columba | 2.0.9 (fork base) |
-| RNS (Python) | 1.1.9 — `torlando-tech/Reticulum`, pinned commit |
-| LXMF (Python) | 0.9.2 — `torlando-tech/LXMF`, pinned commit |
+| RNS (Python) | 1.4.2 — `torlando-tech/Reticulum`, pinned commit |
+| LXMF (Python) | 1.1.0 — `torlando-tech/LXMF`, pinned commit |
 | LXST | LXST-kt `v0.0.4` (Kotlin; no Python LXST) |

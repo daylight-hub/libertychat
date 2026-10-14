@@ -208,4 +208,18 @@ class RnsConfigFileTest {
         assertFalse(out.contains("shared_instance_type"))
         assertFalse(out.contains("rpc_key"))
     }
+
+    @Test
+    fun `enable_transport is rendered from the config flag`() {
+        // LCS: this flag is what lets learned routes survive a restart. Upstream RNS
+        // gates the startup load of its saved path table on transport_enabled(), so
+        // with transport off the destination_table file is written but never read
+        // back and every launch starts with no routes.
+        val on = RnsConfigFile.build(cfg().copy(enableTransport = true))
+        val off = RnsConfigFile.build(cfg().copy(enableTransport = false))
+
+        // yesNo() renders capitalised; RNS parses the value case-insensitively.
+        assertTrue(on.contains("enable_transport = Yes"))
+        assertTrue(off.contains("enable_transport = No"))
+    }
 }

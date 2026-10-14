@@ -1085,8 +1085,20 @@ class NativeRnsBackendImpl(
 
     override suspend fun getPathTableHashes(): List<String> = Transport.pathTable.keys.map { it.toString() }
 
+    /**
+     * LCS: saves known destinations only — the path table is NOT persisted here.
+     *
+     * The old comment claimed "Transport persists automatically via its internal
+     * mechanisms". That was the same wrong assumption the python backend carried,
+     * and it is why learned routes did not survive a restart. Unlike python RNS,
+     * reticulum-kt exposes no path-table flush, so there is nothing to call: fixing
+     * this flavor properly means serialising `Transport.pathTable` ourselves.
+     *
+     * LCS ships `pythonBackend`, where this is fixed, so this is a known gap in the
+     * `kotlinBackend` flavor rather than a shipping bug. Worth closing if that
+     * flavor is ever released.
+     */
     override suspend fun persistTransportData() {
-        // Transport persists automatically via its internal mechanisms
         NativeIdentity.saveKnownDestinations()
     }
 

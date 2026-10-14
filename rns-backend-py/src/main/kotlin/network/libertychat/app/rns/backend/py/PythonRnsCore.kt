@@ -359,10 +359,51 @@ class PythonRnsCore(
             Unit
         }
 
+    /**
+     * LCS: flush RNS's path table, packet hashlist and tunnel table to storage.
+     *
+     * This used to be a no-op, on the reasoning that "RNS persists internally and
+     * there is no public per-call flush hook". Both halves were wrong, and together
+     * they cost users their learned routes whenever the app was backgrounded and
+     * then killed — which is the normal way an Android app dies.
+     *
+     * `Transport.persist_data()` is a public static method, so it is exactly the
+     * per-call flush hook. RNS's own cadence does not cover us: the automatic
+     * triggers are `Reticulum.PERSIST_INTERVAL`, which is **12 hours**, and the
+     * `atexit`-registered `exit_handler`, which Android does not run because it
+     * kills the process rather than letting the interpreter exit. (An explicit
+     * shutdown — Apply & Restart, or Stop — did write, because
+     * `PythonRnsRuntime.stop()` calls `exit_handler` directly. It was only the
+     * ordinary background-and-kill that lost everything.)
+     *
+     * `background = true` matters. It is what RNS's own callers pass, and it makes
+     * `save_path_table` yield the GIL every 10 ms while it walks the table
+     * (`Transport.save_path_table`). Called with the default `false`, the walk plus
+     * `umsgpack.packb` plus the file write plus `gc.collect()` hold the GIL in one
+     * unbroken stretch, which stalls every other thread in this interpreter —
+     * Transport's job loop, the interface readers, the LXMF router. It does not
+     * make the call asynchronous: `persist_data` never spawns a thread, so this
+     * still returns only once the write is done.
+     */
     override suspend fun persistTransportData() {
-        // Upstream RNS persists path tables on its own cadence + on exit_handler.
-        // There is no public per-call flush hook; nothing to do here.
-        Log.d(TAG, "persistTransportData: no-op (RNS persists internally)")
+        // Explicitly <Unit>: pyCall infers T from the lambda's last expression, which
+        // would be the Int from Log.d, and that collides with the bare return below.
+        pyCall<Unit> {
+            if (!runtime.isRunning) {
+                // ON_STOP can land before initialize() finishes, when Transport.owner
+                // is still None and persist_data would raise AttributeError.
+                Log.d(TAG, "persistTransportData: runtime not started, nothing to flush")
+                return@pyCall
+            }
+            transport().callAttr("persist_data", true)
+            // Deliberately "requested": persist_data returns None whether it wrote or
+            // bailed out, and it bails in two cases we cannot see from here — a
+            // contended Transport.persist_lock, and shared-instance client mode,
+            // where all three save paths are gated on
+            // `not Transport.owner.is_connected_to_shared_instance` because the
+            // master instance owns the table.
+            Log.d(TAG, "persistTransportData: requested path table flush")
+        }
     }
 
     override suspend fun getHopCount(destinationHash: ByteArray): Int? =

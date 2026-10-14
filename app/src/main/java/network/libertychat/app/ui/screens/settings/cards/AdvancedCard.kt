@@ -106,13 +106,19 @@ fun AdvancedCard(
             )
         }
         Text(
+            // LCS: on by default. Upstream's copy argued against it for mobile, which
+            // was reasonable when the only thing it bought you was relaying for other
+            // peers. It also turns out to be what makes Reticulum reload its saved
+            // routes at startup, so with it off every launch began with no paths and
+            // waited for the other side to announce again.
             text =
-                "Forward traffic for the mesh network. When disabled, this device will only " +
-                    "handle its own traffic and won't relay messages for other peers. " +
-                    "It's generally not recommended for mobile devices to be transport nodes. " +
-                    "They are less likely to maintain a fixed position in the network, and thus " +
-                    "can negatively impact multihop routing. Enabling this will increase data " +
-                    "usage and battery drain. However, in a BLE-only mesh, it's required for " +
+                "Forward traffic for the mesh network, and keep learned routes across " +
+                    "restarts. On by default: Reticulum only reloads its saved path table " +
+                    "when this is on, so turning it off means the app forgets how to reach " +
+                    "your contacts every time it closes, until they announce again. " +
+                    "Leaving it on also relays messages for other peers, which increases " +
+                    "data usage and battery drain, and a phone that moves around is a less " +
+                    "useful relay than a fixed node. In a BLE-only mesh it is required for " +
                     "multi-hop messaging.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

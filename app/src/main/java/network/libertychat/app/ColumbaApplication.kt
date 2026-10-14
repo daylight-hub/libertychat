@@ -2,6 +2,9 @@ package network.libertychat.app
 
 import android.app.Application
 import android.os.StrictMode
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -595,6 +598,44 @@ class ColumbaApplication : Application() {
         // the filtered enabled set into the native stack. Safe to start before Reticulum is ready
         // (early `reloadInterfaces` calls just log a failure and the next transport change wins).
         interfaceTransportObserver.start(applicationScope)
+
+        startPathTablePersistence()
+    }
+
+    /**
+     * LCS: flush RNS's path table whenever the app goes to the background.
+     *
+     * Without this, learned routes were effectively never written to disk. RNS only
+     * persists on a 12-hour timer or from its `atexit` handler, and Android kills
+     * the process rather than letting the interpreter exit, so the handler does not
+     * run. [onTerminate] is not a substitute — Android never calls it on a real
+     * device. Backgrounding, by contrast, happens every time the user leaves the
+     * app, and is the last moment we are reliably still alive.
+     *
+     * Fire-and-forget on the IO dispatcher: if the process dies mid-flush we are no
+     * worse off than before, and ON_STOP must not be blocked on a Python call.
+     */
+    private fun startPathTablePersistence() {
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            object : DefaultLifecycleObserver {
+                override fun onStop(owner: LifecycleOwner) {
+                    applicationScope.launch(Dispatchers.IO) {
+                        try {
+                            // Bounded: rnsCore here is the AIDL-proxied BoundRnsCore, and
+                            // both awaitBound() and the callback wait suspend without a
+                            // deadline of their own. Unbounded, every ON_STOP that lands
+                            // while the backend is unbound — after an explicit stop, or
+                            // inside the Apply & Restart rebind window — would park a
+                            // coroutine on applicationScope forever, and applicationScope
+                            // is never cancelled.
+                            withTimeoutOrNull(IPC_TIMEOUT_MS) { rnsCore.persistTransportData() }
+                        } catch (e: Exception) {
+                            android.util.Log.w("ColumbaApplication", "Path table flush on background failed", e)
+                        }
+                    }
+                }
+            },
+        )
     }
 
     override fun onTerminate() {

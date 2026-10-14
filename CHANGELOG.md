@@ -9,6 +9,49 @@ upstream; upstream's own history is not repeated here.
 
 ---
 
+## 2.1.1 — 2026-10-14
+
+### Fixed
+
+- **Learned routes survive a restart.** Paths were lost whenever the app was
+  closed and reopened, and the peer had to announce again before anything could
+  be sent. Two independent causes, either of which was enough on its own:
+  - **Nothing was written on a normal background-and-kill.** The backend's
+    `persistTransportData()` was a no-op, on the reasoning that RNS persists on
+    its own cadence. It does, but that cadence is `Reticulum.PERSIST_INTERVAL` —
+    **12 hours** — plus an `atexit` handler that Android never runs, because it
+    kills the process rather than letting the Python interpreter exit.
+    `Application.onTerminate()` was no help either; Android does not call it on a
+    real device. (An explicit Apply & Restart or Stop *did* write, which is why
+    the loss looked intermittent.) It now calls `Transport.persist_data()`, which
+    was a public method all along, and the app flushes whenever it goes to the
+    background — the last moment it is reliably still alive.
+  - **Nothing was ever read back.** Upstream RNS gates the startup load of its
+    saved path table on `Transport.transport_enabled()`, so with transport off
+    the file was written and then ignored. **Transport node is now on by
+    default.** The trade is deliberate: the device also routes traffic for other
+    peers, answers path requests and passes announces along, which costs battery
+    and airtime on a LoRa link. It can still be turned off in Settings, at the
+    price of losing routes on every restart.
+
+  Two limits worth knowing. This covers the shipped `pythonBackend` flavor;
+  `kotlinBackend` still does not persist its path table, because reticulum-kt
+  exposes no flush for it. And neither half applies when the app runs as a
+  shared-instance client — another RNS app on the device owning the stack — since
+  RNS gates both the save and the load on the instance not being a shared client.
+
+### Changed
+
+- Corrected the upstream stack table in the README: the Python stack is RNS
+  **1.4.2** and LXMF **1.1.0**, matching the pinned commits in
+  `rns-backend-py/build.gradle.kts`. It had read 1.1.9 / 0.9.2.
+- Dropped the claim in `rns-backend-py/ARCHITECTURE.md` that AutoInterface
+  hot-add is implemented in Kotlin in `:rns-host`. It is not — the
+  `restartAutoInterface()` hook that the network-change callback invokes is a
+  documented no-op.
+
+---
+
 ## 2.1.0 — 2026-10-07
 
 ### Added

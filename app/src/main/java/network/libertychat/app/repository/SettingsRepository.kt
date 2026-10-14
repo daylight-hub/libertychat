@@ -1158,13 +1158,33 @@ class SettingsRepository
         /**
          * Flow of the transport node enabled setting.
          * When enabled, this device forwards traffic for the mesh network.
-         * When disabled (default), only handles its own traffic.
-         * Defaults to false if not set.
+         * When disabled, only handles its own traffic.
+         *
+         * LCS: defaults to **true**, where upstream defaulted to false.
+         *
+         * This is not really about relaying for others — it is what makes learned
+         * routes survive a restart. Upstream RNS gates the startup load of its
+         * saved path table on `Transport.transport_enabled()`
+         * (`Transport.py`, "Load transport-related data"), so with transport off the
+         * `destination_table` file is written but never read back. Every app launch
+         * then started with an empty path table and had to wait for the peer to
+         * announce again before anything could be sent.
+         *
+         * The cost is real and deliberate: the device now also routes traffic for
+         * other peers, answers path requests and passes announces along, which uses
+         * more battery and more airtime on a LoRa link. Users who would rather not
+         * can still turn it off in Settings, at the price of losing routes on every
+         * restart.
+         *
+         * Note this has no effect when the app runs as a shared-instance client
+         * (another RNS app on the device owns the stack): RNS gates both the save
+         * and the load on `not Transport.owner.is_connected_to_shared_instance`,
+         * because the master instance owns the path table.
          */
         val transportNodeEnabledFlow: Flow<Boolean> =
             context.dataStore.data
                 .map { preferences ->
-                    preferences[PreferencesKeys.TRANSPORT_NODE_ENABLED] ?: false
+                    preferences[PreferencesKeys.TRANSPORT_NODE_ENABLED] ?: TRANSPORT_NODE_DEFAULT
                 }.distinctUntilChanged()
 
         /**
@@ -1173,7 +1193,7 @@ class SettingsRepository
         suspend fun getTransportNodeEnabled(): Boolean =
             context.dataStore.data
                 .map { preferences ->
-                    preferences[PreferencesKeys.TRANSPORT_NODE_ENABLED] ?: false
+                    preferences[PreferencesKeys.TRANSPORT_NODE_ENABLED] ?: TRANSPORT_NODE_DEFAULT
                 }.first()
 
         /**
@@ -1883,6 +1903,12 @@ class SettingsRepository
         }
 
         companion object {
+            /**
+             * LCS: transport node on by default, so RNS loads its saved path table
+             * at startup. See [transportNodeEnabledFlow] for why that gate matters.
+             */
+            const val TRANSPORT_NODE_DEFAULT = true
+
             /** Default incoming message size limit: 1MB */
             const val DEFAULT_INCOMING_SIZE_LIMIT_KB = 1024
 

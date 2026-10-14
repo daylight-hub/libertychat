@@ -27,7 +27,7 @@ new `src/main/python/rns_*.py` fails the build.
 
 **App-logic helpers live in Kotlin in `:rns-host`** (health monitoring,
 link-speed probing, signal-quality parsing, identity file management, blocking,
-interface-name formatting, RMSP propagation client, AutoInterface hot-add,
+interface-name formatting, RMSP propagation client,
 telemetry collection, event dispatch) and are **shared by both backends**.
 Re-introducing their Python counterparts (`health_monitor.py`,
 `link_speed.py`, `blocking_manager.py`, …) is a regression — they were
