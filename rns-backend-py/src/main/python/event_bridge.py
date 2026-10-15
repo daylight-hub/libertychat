@@ -466,6 +466,134 @@ def reset_reticulum_for_restart():
     RNS.log("event_bridge: reset Reticulum + Transport state for restart", RNS.LOG_DEBUG)
 
 
+def _is_blackholed(destination_hash):
+    """
+    Whether [destination_hash]'s identity has been blackholed.
+
+    Mirrors the check upstream's own path-table loader makes. Guarded with
+    getattr because `blackholed_identities` is newer than some RNS pins, and a
+    missing attribute should mean "nothing is blackholed", not a failed restore.
+    """
+    blackholed = getattr(RNS.Transport, "blackholed_identities", None)
+    if not blackholed:
+        return False
+    try:
+        identity = RNS.Identity.recall(destination_hash, _no_use=True)
+    except TypeError:
+        # Older pins have no _no_use keyword.
+        identity = RNS.Identity.recall(destination_hash)
+    return identity in blackholed
+
+
+def restore_path_table():
+    """
+    LCS: load the saved path table, whether or not transport mode is enabled.
+
+    RNS writes the path table unconditionally — `Transport.save_path_table` only
+    skips when connected to a shared instance — but it *reads* it back inside
+    `Transport.start` under `if RNS.Reticulum.transport_enabled():`. With
+    transport off, every learned route was therefore written to storage and never
+    loaded again, so the app lost its routes on every restart and the peer had to
+    re-announce before it could be reached.
+
+    2.1.1 worked around that by turning transport node on by default, which did
+    restore routes but also made every handset route other peers' traffic. This
+    is the narrower fix: do the load ourselves, so transport mode goes back to
+    being a choice about whether to carry other people's traffic rather than the
+    price of keeping your own routes.
+
+    Mirrors upstream's loader in `Transport.start` field for field, including
+    re-resolving the interface by its hash and bumping the cached announce's hop
+    count (reading a packet from cache is equivalent to receiving it again).
+    Deliberately does not overwrite an entry that is already live: anything
+    learned since this process started is fresher than what is on disk.
+
+    Call after the Reticulum instance is constructed, so interfaces are attached
+    and `find_interface_from_hash` can resolve them.
+
+    Returns the number of entries restored.
+    """
+    import os
+
+    import RNS.vendor.umsgpack as umsgpack
+
+    transport = RNS.Transport
+    if transport.owner is not None and getattr(
+        transport.owner, "is_connected_to_shared_instance", False
+    ):
+        # Another RNS app owns the stack; its path table is not ours to seed.
+        return 0
+
+    if RNS.Reticulum.transport_enabled():
+        # Upstream already loaded it inside Transport.start.
+        return 0
+
+    path = RNS.Reticulum.storagepath + "/destination_table"
+    if not os.path.isfile(path):
+        return 0
+
+    try:
+        with open(path, "rb") as handle:
+            serialised = umsgpack.unpackb(handle.read())
+    except Exception as e:  # noqa: BLE001 — a corrupt table must not block startup
+        RNS.log(f"event_bridge: could not read saved path table: {e}", RNS.LOG_ERROR)
+        return 0
+
+    hash_length = RNS.Reticulum.TRUNCATED_HASHLENGTH // 8
+    restored = 0
+    skipped_live = 0
+
+    for entry in serialised:
+        try:
+            destination_hash = entry[0]
+            if len(destination_hash) != hash_length:
+                continue
+
+            with transport.path_table_lock:
+                already_live = destination_hash in transport.path_table
+            if already_live:
+                skipped_live += 1
+                continue
+
+            timestamp, received_from, hops, expires, random_blobs = entry[1:6]
+            receiving_interface = transport.find_interface_from_hash(entry[6])
+            announce_packet = transport.get_cached_packet(entry[7], packet_type="announce")
+
+            if announce_packet is None or receiving_interface is None:
+                continue
+            if _is_blackholed(destination_hash):
+                # Upstream's loader drops these too. Restoring a path to an
+                # identity the user has blackholed would quietly undo the
+                # blackhole for as long as the entry lived.
+                continue
+            if not announce_packet.unpack():
+                continue
+
+            # Cached announce carries its pre-increment hop count.
+            announce_packet.hops += 1
+
+            with transport.path_table_lock:
+                transport.path_table[destination_hash] = [
+                    timestamp,
+                    received_from,
+                    hops,
+                    expires,
+                    random_blobs,
+                    receiving_interface,
+                    announce_packet.packet_hash,
+                ]
+            restored += 1
+        except Exception as e:  # noqa: BLE001 — one bad row must not lose the rest
+            RNS.log(f"event_bridge: skipped a saved path entry: {e}", RNS.LOG_DEBUG)
+
+    RNS.log(
+        f"event_bridge: restored {restored} path(s) from storage with transport "
+        f"disabled ({skipped_live} already live, {len(serialised)} on disk)",
+        RNS.LOG_NOTICE,
+    )
+    return restored
+
+
 def _interface_named(name):
     """The live interface object called `name`, or None if it is not attached."""
     for iface in RNS.Transport.interfaces:

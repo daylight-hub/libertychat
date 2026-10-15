@@ -292,6 +292,22 @@ class PythonRnsRuntime(
         // singleton — stop() must fully tear it down before a restart.
         reticulumInstance = rnsModule.callAttr("Reticulum", configDir.absolutePath)
 
+        // LCS: load the saved path table when transport mode is off.
+        //
+        // RNS writes the table unconditionally but only reads it back inside
+        // Transport.start, under `if transport_enabled()`. With transport off,
+        // every learned route was written to storage and never loaded again — so
+        // routes were lost on each restart and the peer had to re-announce. This
+        // does the load ourselves, which is what lets transport node stay off by
+        // default instead of being the price of keeping your own routes.
+        //
+        // Must run after the Reticulum constructor, not before: interfaces are
+        // attached during __apply_config, and the loader re-resolves each entry's
+        // interface by hash. A no-op when transport is on (upstream already
+        // loaded it) or when another app owns the stack.
+        runCatching { eventBridge.callAttr("restore_path_table") }
+            .onFailure { Log.w(TAG, "Could not restore the saved path table", it) }
+
         // Delivery identity. The 64-byte private key is held in memory only;
         // RNS.Identity.from_bytes() reconstructs the keypair.
         val identityClass = rnsModule["Identity"]

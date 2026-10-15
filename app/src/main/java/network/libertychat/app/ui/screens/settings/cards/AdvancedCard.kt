@@ -106,20 +106,16 @@ fun AdvancedCard(
             )
         }
         Text(
-            // LCS: on by default. Upstream's copy argued against it for mobile, which
-            // was reasonable when the only thing it bought you was relaying for other
-            // peers. It also turns out to be what makes Reticulum reload its saved
-            // routes at startup, so with it off every launch began with no paths and
-            // waited for the other side to announce again.
+            // LCS: off by default, as upstream has it. 2.1.1 turned it on because
+            // Reticulum only reloads its saved path table when transport is
+            // enabled; the app now does that load itself, so this toggle is back to
+            // meaning just one thing — whether you relay for other peers.
             text =
-                "Forward traffic for the mesh network, and keep learned routes across " +
-                    "restarts. On by default: Reticulum only reloads its saved path table " +
-                    "when this is on, so turning it off means the app forgets how to reach " +
-                    "your contacts every time it closes, until they announce again. " +
-                    "Leaving it on also relays messages for other peers, which increases " +
-                    "data usage and battery drain, and a phone that moves around is a less " +
-                    "useful relay than a fixed node. In a BLE-only mesh it is required for " +
-                    "multi-hop messaging.",
+                "Forward traffic for other peers on the mesh. Off by default: a phone " +
+                    "that moves around makes a poor relay, and relaying costs battery and " +
+                    "airtime. Turning it off does not lose your own routes — the app keeps " +
+                    "those across restarts either way. In a BLE-only mesh this is required " +
+                    "for multi-hop messaging.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

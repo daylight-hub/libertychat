@@ -62,14 +62,11 @@ class AdvancedCardTest {
         }
         composeTestRule
             .onNodeWithText(
-                "Forward traffic for the mesh network, and keep learned routes across " +
-                    "restarts. On by default: Reticulum only reloads its saved path table " +
-                    "when this is on, so turning it off means the app forgets how to reach " +
-                    "your contacts every time it closes, until they announce again. " +
-                    "Leaving it on also relays messages for other peers, which increases " +
-                    "data usage and battery drain, and a phone that moves around is a less " +
-                    "useful relay than a fixed node. In a BLE-only mesh it is required for " +
-                    "multi-hop messaging.",
+                "Forward traffic for other peers on the mesh. Off by default: a phone " +
+                    "that moves around makes a poor relay, and relaying costs battery and " +
+                    "airtime. Turning it off does not lose your own routes — the app keeps " +
+                    "those across restarts either way. In a BLE-only mesh this is required " +
+                    "for multi-hop messaging.",
             ).assertIsDisplayed()
     }
 

@@ -44,6 +44,26 @@ changes including 2.1.1's transport-node default and 2.2.0's interface reload.
 - Two new AIDL parcelables (`NomadnetMediaResult`, `NomadnetLinkStats`), three
   new seam methods, and two new `RnsError` variants.
 
+### Changed
+
+- **Transport node is off by default again**, as upstream has it, and the toggle
+  is back to meaning only what it says: whether this device carries other peers'
+  traffic.
+  2.1.1 turned it on for a real reason in the wrong place. Upstream RNS gates the
+  *startup load* of its saved path table on `transport_enabled()`, while
+  `save_path_table` is ungated — so with transport off the `destination_table`
+  file was written and never read back, and every launch began with no routes.
+  Turning transport on fixed that, but it also made every handset relay traffic,
+  answer path requests and pass announces along: battery and LoRa airtime spent
+  on something the user never asked for.
+  `event_bridge.restore_path_table()` now performs that load itself, ungated, so
+  learned routes survive a restart either way. It mirrors upstream's own loader
+  field for field — re-resolving each entry's interface by hash, bumping the
+  cached announce's hop count, and skipping blackholed identities — and will not
+  overwrite an entry already learned since the process started. A no-op when
+  transport is on (upstream has already loaded it) or when another RNS app owns
+  the stack.
+
 ### Fixed
 
 - The NomadNet link is retried after waiting for route discovery on a cold

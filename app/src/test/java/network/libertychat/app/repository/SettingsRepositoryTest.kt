@@ -69,6 +69,19 @@ class SettingsRepositoryTest {
     // ========== Transport Node Tests ==========
 
     @Test
+    fun transportNodeEnabledFlow_defaultsToOff() =
+        runTest {
+            // LCS: 2.1.1 defaulted this ON, because upstream RNS only reloads its
+            // saved path table when transport is enabled — so the toggle had become
+            // the price of keeping your own routes rather than a choice about
+            // relaying. event_bridge.restore_path_table() does that load itself now,
+            // so this is back to meaning only "carry other peers' traffic", which a
+            // phone should not do unless asked.
+            assertFalse(repository.transportNodeEnabledFlow.first())
+            assertFalse(SettingsRepository.TRANSPORT_NODE_DEFAULT)
+        }
+
+    @Test
     fun transportNodeEnabledFlow_emitsOnlyOnChange() =
         runTest {
             repository.transportNodeEnabledFlow.test(timeout = 5.seconds) {

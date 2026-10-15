@@ -113,15 +113,16 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
   learned on that interface are kept: RNS drops every path whose interface has
   been detached, so a reload carries the entries over to the rebuilt interface and
   a restart flushes the path table before going down.
-- **Learned routes survive a restart.** Transport node is on by default, which
-  is what makes RNS load its saved path table at startup — upstream gates that
-  load on transport being enabled, so with it off the table was written and never
-  read back. The app also flushes the table when it goes to the background, since
-  RNS's own persistence otherwise only fires on a 12-hour timer or an `atexit`
-  handler that Android never runs. The trade is that the device also routes
-  traffic for other peers; it can be turned off in Settings, at the price of
-  losing routes on every restart. Does not apply when another RNS app on the
-  device owns the stack as a shared instance.
+- **Learned routes survive a restart**, with transport node off. Upstream RNS
+  gates the startup load of its saved path table on transport being enabled,
+  while the save is ungated — so with transport off the table was written and
+  never read back. The app performs that load itself instead, mirroring
+  upstream's own loader, so transport node stays off by default and remains
+  purely a choice about whether to relay other peers' traffic. The app also
+  flushes the table when it goes to the background, since RNS's own persistence
+  otherwise only fires on a 12-hour timer or an `atexit` handler that Android
+  never runs. Does not apply when another RNS app on the device owns the stack
+  as a shared instance.
 - **Doze protection no longer lapses.** The wake lock that keeps the Reticulum
   service running is renewed on a timer rather than taken once with a long
   timeout. Previously it expired after ten hours and was only ever re-taken on a
