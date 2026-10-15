@@ -9,7 +9,7 @@ upstream; upstream's own history is not repeated here.
 
 ---
 
-## 2.2.0 — unreleased
+## 2.2.0 — 2026-10-15
 
 ### Changed
 
