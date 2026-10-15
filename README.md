@@ -81,7 +81,11 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
 ### Navigation
 
 - **The bottom bar is configurable** in Settings: choose which tabs appear and in
-  what order, up to five, with Settings pinned last. NomadNet can be one of them.
+  what order, up to five, with Settings pinned last.
+- The default bar is **Chats, Contacts, Map, NomadNet, Settings**. Upstream leaves
+  NomadNet off its default bar, which hides the feature entirely on a fresh
+  install — the per-announce *Browse Site* button only shows for announces from
+  actual NomadNet nodes.
 
 ### Network
 

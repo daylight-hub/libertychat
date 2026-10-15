@@ -76,4 +76,18 @@ class NavTabTest {
             )
         }
     }
+
+    @Test
+    fun `the default bar reaches NomadNet without configuration`() {
+        // LCS: upstream leaves NomadNet opt-in, which on a fresh install means
+        // there is no way into it at all — the per-announce "Browse Site" button
+        // only shows for the nomadnetwork.node aspect, so with no such announce
+        // received the feature is invisible. It must be in the default bar.
+        assertTrue(NavTab.NOMADNET in NavTab.DEFAULT)
+        assertTrue(NavTab.NOMADNET in NavTab.sanitize(null))
+
+        // Still a legal bar: pinned Settings present, last, and within the cap.
+        assertEquals(NavTab.SETTINGS, NavTab.DEFAULT.last())
+        assertTrue(NavTab.DEFAULT.size <= NavTab.MAX_TABS)
+    }
 }

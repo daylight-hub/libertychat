@@ -33,9 +33,14 @@ changes including 2.1.1's transport-node default and 2.2.0's interface reload.
   unflagged. Includes upstream's hardening for concurrent requests and for a
   stale identify completing after navigation.
 - **User-configurable bottom navigation.** The bar's tabs and their order are
-  chosen in Settings, with Settings pinned last and a five-tab ceiling. NomadNet
-  is available as a tab; upstream's default bar — Chats, Contacts, Map, Settings
-  — is unchanged, so nothing moves unless you change it.
+  chosen in Settings, with Settings pinned last and a five-tab ceiling.
+  - **LCS ships NomadNet in the default bar**, where upstream leaves it opt-in.
+    Upstream's default is Chats, Contacts, Map, Settings, which on a fresh
+    install leaves no way into NomadNet at all: the per-announce "Browse Site"
+    button only appears for the `nomadnetwork.node` aspect, so with no such
+    announce received the feature is invisible. The default is now Chats,
+    Contacts, Map, NomadNet, Settings — the three existing tabs keep their
+    positions, and it is still within the five-tab cap.
 - **NomadNet keeps its session across tab switches.** Moving to another tab and
   back leaves the page you left on screen with no re-fetch, because the
   navigation entry is saved and restored rather than popped. Re-tapping the

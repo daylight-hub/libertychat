@@ -51,8 +51,19 @@ enum class NavTab(
         /** Maximum number of tabs in the bar, including the pinned Settings tab. */
         const val MAX_TABS = 5
 
-        /** Bar layout shown before the user configures anything. */
-        val DEFAULT: List<NavTab> = listOf(CHATS, CONTACTS, MAP, SETTINGS)
+        /**
+         * Bar layout shown before the user configures anything.
+         *
+         * LCS: includes [NOMADNET], where upstream's default omits it. Upstream
+         * treats the NomadNet tab as opt-in, which leaves a fresh install with no
+         * way to reach a node unless an announce from one happens to arrive — the
+         * per-announce "Browse Site" button only appears for the
+         * `nomadnetwork.node` aspect. LCS ships NomadNet as a feature people are
+         * expected to use, so it gets a permanent entry with its own address
+         * field. Four entries plus pinned Settings, which is exactly [MAX_TABS],
+         * and the pre-existing three keep their positions.
+         */
+        val DEFAULT: List<NavTab> = listOf(CHATS, CONTACTS, MAP, NOMADNET, SETTINGS)
 
         /** All tabs the user may toggle in the settings card (Settings is pinned). */
         val CONFIGURABLE: List<NavTab> = entries.filter { it != SETTINGS }
