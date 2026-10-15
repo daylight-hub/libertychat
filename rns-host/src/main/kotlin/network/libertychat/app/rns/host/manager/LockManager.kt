@@ -26,7 +26,26 @@ class LockManager(
         private const val TAG = "LockManager"
         private const val MULTICAST_LOCK_TAG = "ReticulumMulticast"
         private const val WAKE_LOCK_TAG = "Columba::ReticulumService"
-        private const val WAKE_LOCK_TIMEOUT_MS = 10 * 60 * 60 * 1000L // 10 hours
+        /**
+         * Safety net, not the working lifetime. Android releases a timed wake lock
+         * when it expires, so this only has to outlast
+         * [WAKE_LOCK_REFRESH_INTERVAL_MS] by a wide margin — it exists so a wake
+         * lock cannot be leaked indefinitely if the holder stops refreshing.
+         *
+         * LCS: was 10 hours with nothing refreshing it, so after ten hours of
+         * uptime on a stable network the stack lost its doze protection and went
+         * quiet — AutoInterface stops sending peer announces, peers age out at its
+         * 22s peering timeout, and the interfaces look stale until something
+         * triggers a network change.
+         */
+        private const val WAKE_LOCK_TIMEOUT_MS = 2 * 60 * 60 * 1000L // 2 hours
+
+        /**
+         * How often [refreshAll] should be called to push the expiry back. Well
+         * inside [WAKE_LOCK_TIMEOUT_MS], so several refreshes can be missed — a
+         * doze window, a slow tick — before the lock actually lapses.
+         */
+        const val WAKE_LOCK_REFRESH_INTERVAL_MS = 20 * 60 * 1000L // 20 minutes
     }
 
     // Mutex for thread-safe lock operations
@@ -64,6 +83,34 @@ class LockManager(
      * Set by the native stack (NativeInterfaceFactory manages it per-AutoInterface).
      */
     var skipMulticastLock: Boolean = false
+
+    /**
+     * LCS: push the wake lock's expiry back, re-taking it if it already lapsed.
+     *
+     * Call on a timer at [WAKE_LOCK_REFRESH_INTERVAL_MS]. [acquireAll] cannot do
+     * this job: it only takes the lock when one is not already held, so on its own
+     * it leaves the timed lock to expire and never renews it.
+     *
+     * Re-acquiring an already-held, non-reference-counted wake lock resets its
+     * timeout rather than stacking, which is why this is safe to call repeatedly.
+     */
+    fun refreshAll() {
+        synchronized(lockMutex) {
+            try {
+                if (!skipMulticastLock) acquireMulticastLock()
+
+                val held = wakeLock?.takeIf { it.isHeld }
+                if (held == null) {
+                    acquireWakeLock()
+                } else {
+                    @Suppress("DEPRECATION")
+                    held.acquire(WAKE_LOCK_TIMEOUT_MS)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error refreshing locks", e)
+            }
+        }
+    }
 
     /**
      * Release all held locks.

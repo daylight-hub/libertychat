@@ -4,7 +4,9 @@ import android.util.Log
 import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import network.libertychat.app.repository.InterfaceRepository
+import network.libertychat.app.rns.api.RnsCore
 import network.libertychat.app.rns.api.RnsTransportAdmin
 import network.libertychat.app.rns.api.model.InterfaceConfig
 import network.libertychat.app.rns.host.manager.CurrentTransport
@@ -46,6 +48,7 @@ class AutoInterfaceRecovery
     constructor(
         private val watcher: AutoInterfaceWatcher,
         private val transportAdmin: RnsTransportAdmin,
+        private val rnsCore: RnsCore,
         private val interfaceRepository: InterfaceRepository,
         private val interfaceConfigManager: InterfaceConfigManager,
         private val configApplyFlagManager: ConfigApplyFlagManager,
@@ -67,6 +70,15 @@ class AutoInterfaceRecovery
              */
             @VisibleForTesting
             internal const val RESTART_COOLDOWN_MS = 60_000L
+
+            /**
+             * Deadline for the pre-restart path-table flush. Bounded because the
+             * flush crosses the AIDL seam into the `:reticulum` process, and a
+             * recovery must not hang on it — losing a few routes is better than
+             * never rebuilding the interface.
+             */
+            @VisibleForTesting
+            internal const val PERSIST_TIMEOUT_MS = 5_000L
         }
 
         /** What a call to [recoverIfNeeded] did, so callers and tests can tell the paths apart. */
@@ -185,6 +197,29 @@ class AutoInterfaceRecovery
             }
 
             Log.i(TAG, "Restarting Reticulum: live reload declined and AutoInterface cannot see $appeared")
+
+            // Flush before tearing the stack down. A restart does reload the path
+            // table at init, but only what was last written to storage — RNS's own
+            // persistence fires on a 12-hour timer and an `atexit` handler Android
+            // never runs, and the app otherwise only flushes when it goes to the
+            // background. Without this, a recovery the user never asked for costs
+            // them every route learned since the last flush.
+            val flushed =
+                withTimeoutOrNull(PERSIST_TIMEOUT_MS) {
+                    try {
+                        rnsCore.persistTransportData()
+                        true
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Path-table flush before restart failed", e)
+                        false
+                    }
+                }
+            if (flushed != true) {
+                Log.w(TAG, "Restarting without a fresh path-table flush; recent routes may be lost")
+            }
+
             val result =
                 try {
                     interfaceConfigManager.applyInterfaceChanges()

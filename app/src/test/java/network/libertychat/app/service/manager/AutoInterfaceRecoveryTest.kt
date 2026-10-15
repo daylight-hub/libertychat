@@ -7,6 +7,7 @@ import io.mockk.slot
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import network.libertychat.app.repository.InterfaceRepository
+import network.libertychat.app.rns.api.RnsCore
 import network.libertychat.app.rns.api.RnsTransportAdmin
 import network.libertychat.app.rns.api.model.InterfaceConfig
 import network.libertychat.app.rns.host.manager.CurrentTransport
@@ -34,6 +35,7 @@ import org.junit.Test
 class AutoInterfaceRecoveryTest {
     private lateinit var watcher: AutoInterfaceWatcher
     private lateinit var transportAdmin: RnsTransportAdmin
+    private lateinit var rnsCore: RnsCore
     private lateinit var interfaceRepository: InterfaceRepository
     private lateinit var interfaceConfigManager: InterfaceConfigManager
     private lateinit var configApplyFlagManager: ConfigApplyFlagManager
@@ -48,6 +50,7 @@ class AutoInterfaceRecoveryTest {
         watcher.adoptableProvider = { present }
 
         transportAdmin = mockk()
+        rnsCore = mockk()
         interfaceRepository = mockk()
         interfaceConfigManager = mockk()
         configApplyFlagManager = mockk()
@@ -57,11 +60,13 @@ class AutoInterfaceRecoveryTest {
         // hardcoded one would pass a test and fail on any renamed interface.
         givenEnabledInterfaces(InterfaceConfig.AutoInterface(name = "Mesh Discovery"))
         every { configApplyFlagManager.isApplyingConfig() } returns false
+        coEvery { rnsCore.persistTransportData() } returns Unit
 
         recovery =
             AutoInterfaceRecovery(
                 watcher = watcher,
                 transportAdmin = transportAdmin,
+                rnsCore = rnsCore,
                 interfaceRepository = interfaceRepository,
                 interfaceConfigManager = interfaceConfigManager,
                 configApplyFlagManager = configApplyFlagManager,
@@ -242,6 +247,63 @@ class AutoInterfaceRecoveryTest {
                 AutoInterfaceRecovery.Outcome.APPLY_IN_PROGRESS,
                 recovery.recoverIfNeeded(CurrentTransport.WIFI_LIKE),
             )
+        }
+
+    @Test
+    fun `flushes the path table before restarting, not after`() =
+        runTest {
+            // A restart reloads the path table from storage, but only what was last
+            // written there — so the flush has to happen before the stack goes down
+            // or the restart restores a stale table and the routes learned since the
+            // last flush are gone. Order is the whole point, hence the recorder.
+            val order = mutableListOf<String>()
+            coEvery { transportAdmin.reloadInterfaceByName(any()) } returns false
+            coEvery { rnsCore.persistTransportData() } coAnswers { order.add("flush") }
+            coEvery { interfaceConfigManager.applyInterfaceChanges(any()) } coAnswers {
+                order.add("restart")
+                Result.success(Unit)
+            }
+            givenInterfaceAppeared()
+
+            assertEquals(
+                AutoInterfaceRecovery.Outcome.RESTARTED,
+                recovery.recoverIfNeeded(CurrentTransport.WIFI_LIKE),
+            )
+            assertEquals(listOf("flush", "restart"), order)
+        }
+
+    @Test
+    fun `restarts even when the pre-restart flush fails`() =
+        runTest {
+            // Losing a few recent routes is better than never rebuilding the
+            // interface, so a failed flush must not abort the recovery.
+            coEvery { transportAdmin.reloadInterfaceByName(any()) } returns false
+            coEvery { rnsCore.persistTransportData() } throws IllegalStateException("binder died")
+            coEvery { interfaceConfigManager.applyInterfaceChanges(any()) } returns Result.success(Unit)
+            givenInterfaceAppeared()
+
+            assertEquals(
+                AutoInterfaceRecovery.Outcome.RESTARTED,
+                recovery.recoverIfNeeded(CurrentTransport.WIFI_LIKE),
+            )
+        }
+
+    @Test
+    fun `does not flush when the live reload succeeds`() =
+        runTest {
+            // The reload keeps the stack up and carries the paths across in the
+            // backend, so there is nothing to protect against here — and a flush
+            // walks the whole table under the GIL, which is not free.
+            var flushes = 0
+            coEvery { transportAdmin.reloadInterfaceByName(any()) } returns true
+            coEvery { rnsCore.persistTransportData() } coAnswers { flushes++ }
+            givenInterfaceAppeared()
+
+            assertEquals(
+                AutoInterfaceRecovery.Outcome.RELOADED,
+                recovery.recoverIfNeeded(CurrentTransport.WIFI_LIKE),
+            )
+            assertEquals(0, flushes)
         }
 
     @Test

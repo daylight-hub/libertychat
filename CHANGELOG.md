@@ -72,6 +72,40 @@ upstream; upstream's own history is not repeated here.
     `reload_interface` would forward the request over RPC to *their* instance,
     where our interface names mean nothing.
 
+### Fixed
+
+- **Recovering an interface no longer throws away the routes learned on it.**
+  `Transport.jobs()` culls every path table entry whose attached interface has
+  left `Transport.interfaces` — *"removed since the attached interface no longer
+  exists"* — so detaching an interface silently drops its routes within seconds.
+  That bites both recovery paths:
+  - A **live reload** had no recovery at all, because the path table is only read
+    from storage inside `Transport.start`; a reload has no reload-from-disk behind
+    it the way a restart does, and the next persistence flush would write the loss
+    through to the saved table. Reloads now go through
+    `event_bridge.reload_interface_preserving_paths`, which takes the affected
+    entries first and re-inserts them against the new interface object — the same
+    rebinding `Transport.start` performs via `find_interface_from_hash`. The
+    interface slot is located by object identity rather than a hardcoded index, so
+    a future change to the entry layout cannot make it write the wrong field.
+  - A **restart** does reload the table, but only what was last written. RNS's own
+    persistence fires on a 12-hour timer and an `atexit` handler Android never
+    runs, and the app otherwise only flushes on backgrounding — so a recovery the
+    user never asked for cost them everything learned since. The path table is now
+    flushed before the restart, under a 5s deadline so a wedged IPC call cannot
+    hang the recovery.
+- **The stack no longer goes quiet after ten hours.** The doze-protection wake
+  lock was taken with a 10-hour timeout, and `acquireAll()` runs only at service
+  start and on a network change — and only takes a lock when one is not already
+  held, so it could never renew a timed one. On a device sitting on a single
+  network the lock simply lapsed, letting the CPU doze: the Python stack's timers
+  stop, `AutoInterface` stops sending peer announces, its peers age out at the 22s
+  peering timeout, and every interface looks stale until something unrelated
+  rebuilt the locks. `LockManager.refreshAll()` now pushes the expiry back every
+  20 minutes against a 2-hour backstop. Re-acquiring a non-reference-counted wake
+  lock resets its timeout rather than stacking, so the keepalive is safe to run on
+  a timer.
+
 ### Added
 
 - `RnsTransportAdmin.reloadInterfaceByName(name)` across the backend seam — AIDL

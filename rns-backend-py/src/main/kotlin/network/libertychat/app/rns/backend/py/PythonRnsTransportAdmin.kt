@@ -383,10 +383,19 @@ class PythonRnsTransportAdmin(
                 return@pyCall false
             }
 
-            // _reload_interface returns True on success, False or None on a
+            // Goes through our own helper rather than calling
+            // `Reticulum.reload_interface` directly, because the bare reload
+            // discards every route learned through the interface: the detach takes
+            // the old object out of `Transport.interfaces`, and the path-table cull
+            // in `Transport.jobs()` drops each entry still pointing at it —
+            // "removed since the attached interface no longer exists". A reload has
+            // no reload-from-disk behind it the way a full restart does, so those
+            // routes would simply be gone. The helper carries them across and
+            // rebinds them to the new object.
+            //
+            // The underlying reload returns True on success, False or None on a
             // refusal: management disabled, an I2P or local interface, a failed
-            // detach or re-attach, or — the common one here — a name that is not
-            // currently attached.
+            // detach or re-attach, or a name that is not currently attached.
             //
             // That last case is what makes this safe to call blind. The re-attach
             // runs `_synthesize_interface(force_attach=True)`, which ignores the
@@ -398,8 +407,13 @@ class PythonRnsTransportAdmin(
             // None when it is not there, so an interface that was never attached
             // stays that way. Hence reload rather than detach + attach.
             val reloaded =
-                runCatching { instance.callAttr("reload_interface", interfaceName) }
-                    .map { it?.toJava(Boolean::class.javaObjectType) ?: false }
+                runCatching {
+                    runtime.eventBridge.callAttr(
+                        "reload_interface_preserving_paths",
+                        instance,
+                        interfaceName,
+                    )
+                }.map { it?.toJava(Boolean::class.javaObjectType) ?: false }
                     .getOrElse { e ->
                         Log.w(TAG, "reload_interface unavailable or failed for '$interfaceName'", e)
                         false

@@ -19,6 +19,7 @@ import kotlinx.coroutines.withTimeout
 import network.libertychat.app.rns.api.RnsBackend
 import network.libertychat.app.rns.host.binder.ReticulumServiceBinder
 import network.libertychat.app.rns.host.di.ServiceModule
+import network.libertychat.app.rns.host.manager.LockManager
 import network.libertychat.app.rns.host.persistence.BackendInitializer
 import network.libertychat.app.rns.host.persistence.PeerActivityCollector
 import network.libertychat.app.rns.host.rnode.KotlinRNodeBridge
@@ -214,6 +215,7 @@ class ReticulumService : Service() {
         // live value off the in-process Python backend (no network traffic), so a
         // slow cadence is fine - battery changes gradually. < 0 = absent (hidden).
         startRNodeBatteryPoller()
+        startLockKeepalive()
         val usbBridge = KotlinUSBBridge.getInstance(this)
         // Seed hasActiveUsbRNode from devices already attached when the
         // service starts. Without this, an RNode plugged in BEFORE the
@@ -318,6 +320,31 @@ class ReticulumService : Service() {
      * traffic), so a slow cadence is fine - battery changes gradually.
      * Values < 0 mean "absent" and are hidden by the manager.
      */
+    /**
+     * LCS: keep the doze-protection wake lock from lapsing.
+     *
+     * The wake lock is taken with a timeout, which Android enforces by releasing
+     * it. `acquireAll()` runs once at service start and again on a network change,
+     * and it only takes the lock when one is not already held — so on a device
+     * sitting on one network, the lock expired and nothing renewed it. With the
+     * CPU free to doze, the Python stack's timers stop firing: AutoInterface stops
+     * sending peer announces, its peers age out at the 22s peering timeout, and
+     * everything looks stale until some unrelated event rebuilt the locks.
+     *
+     * Separate from [startRNodeBatteryPoller] rather than folded into it, so the
+     * cadence of a UI-facing poll and the cadence of doze protection stay
+     * independent.
+     */
+    private fun startLockKeepalive() {
+        serviceScope.launch {
+            while (isActive) {
+                delay(LockManager.WAKE_LOCK_REFRESH_INTERVAL_MS)
+                runCatching { managers.lockManager.refreshAll() }
+                    .onFailure { Log.w(TAG, "Lock keepalive failed", it) }
+            }
+        }
+    }
+
     private fun startRNodeBatteryPoller() {
         serviceScope.launch {
             while (isActive) {

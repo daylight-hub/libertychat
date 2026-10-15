@@ -92,7 +92,10 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
   re-runs its NIC enumeration while BLE, RNode and TCP links stay up; a full
   restart is the fallback for when the live reload isn't available. Ordinary
   churn — a reconnect, an AP roam, a new link-local address — is left alone,
-  because RNS repairs that itself every four seconds.
+  because RNS repairs that itself every four seconds. Either way the routes
+  learned on that interface are kept: RNS drops every path whose interface has
+  been detached, so a reload carries the entries over to the rebuilt interface and
+  a restart flushes the path table before going down.
 - **Learned routes survive a restart.** Transport node is on by default, which
   is what makes RNS load its saved path table at startup — upstream gates that
   load on transport being enabled, so with it off the table was written and never
@@ -102,6 +105,11 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
   traffic for other peers; it can be turned off in Settings, at the price of
   losing routes on every restart. Does not apply when another RNS app on the
   device owns the stack as a shared instance.
+- **Doze protection no longer lapses.** The wake lock that keeps the Reticulum
+  service running is renewed on a timer rather than taken once with a long
+  timeout. Previously it expired after ten hours and was only ever re-taken on a
+  network change, so a phone left on one Wi-Fi network stopped announcing to its
+  AutoInterface peers and lost them to the 22-second peering timeout.
 - **Request path** in the chat's three-dot menu, for asking on demand — when a
   repeater has just come back up, say, rather than waiting for the automatic
   attempt. A deliberate tap bypasses the rate limit.

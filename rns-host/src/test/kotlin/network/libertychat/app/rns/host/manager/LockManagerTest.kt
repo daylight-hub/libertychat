@@ -234,4 +234,48 @@ class LockManagerTest {
         // Verify wake lock is held again after re-acquisition
         assertTrue("Wake lock should be held after re-acquisition", lockManager.getLockStatus().wakeHeld)
     }
+
+    @Test
+    fun `refreshAll re-acquires a wake lock that has already lapsed`() {
+        // Android releases a timed wake lock when it expires. Nothing renewed it
+        // before this existed, so after the timeout the stack lost doze protection
+        // until an unrelated network change rebuilt the locks.
+        lockManager.acquireAll()
+        assertTrue(lockManager.getLockStatus().wakeHeld.not())
+
+        val acquisitions = mutableListOf<Long>()
+        every { wakeLock.acquire(any()) } answers {
+            acquisitions.add(firstArg())
+            Unit
+        }
+
+        lockManager.refreshAll()
+
+        assertEquals(1, acquisitions.size)
+    }
+
+    @Test
+    fun `refreshAll pushes back a held lock instead of taking a second one`() {
+        // Re-acquiring a non-reference-counted wake lock resets its timeout rather
+        // than stacking, which is what makes the keepalive safe to run on a timer.
+        var wakeLocksCreated = 0
+        every { powerManager.newWakeLock(any(), any()) } answers {
+            wakeLocksCreated++
+            wakeLock
+        }
+        val acquisitions = mutableListOf<Long>()
+        every { wakeLock.acquire(any()) } answers {
+            acquisitions.add(firstArg())
+            Unit
+        }
+
+        lockManager.acquireAll()
+        every { wakeLock.isHeld } returns true
+        lockManager.refreshAll()
+        lockManager.refreshAll()
+
+        assertEquals(1, wakeLocksCreated)
+        assertEquals(3, acquisitions.size)
+        assertEquals(acquisitions[0], acquisitions[2])
+    }
 }

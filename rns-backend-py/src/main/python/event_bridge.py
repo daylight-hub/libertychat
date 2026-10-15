@@ -466,6 +466,125 @@ def reset_reticulum_for_restart():
     RNS.log("event_bridge: reset Reticulum + Transport state for restart", RNS.LOG_DEBUG)
 
 
+def _interface_named(name):
+    """The live interface object called `name`, or None if it is not attached."""
+    for iface in RNS.Transport.interfaces:
+        if getattr(iface, "name", None) == name:
+            return iface
+    return None
+
+
+def _snapshot_paths_via(interface_obj):
+    """
+    Path table entries learned through `interface_obj`, ready to be rebound.
+
+    Returns a list of (destination_hash, entry_copy, slot) where `slot` is the
+    index in the entry that holds the interface reference.
+
+    The slot is found by identity rather than by a hardcoded index. Upstream
+    names it `IDX_PT_RVCD_IF` as a module-level constant in `RNS.Transport`,
+    but the entry is a plain list and the layout has shifted between RNS
+    releases before. Searching for the object we already hold cannot read the
+    wrong field, and an entry whose shape we do not recognise is skipped
+    instead of being corrupted.
+    """
+    snapshot = []
+    with RNS.Transport.path_table_lock:
+        for destination_hash, entry in RNS.Transport.path_table.items():
+            try:
+                slot = next(
+                    i for i, value in enumerate(entry) if value is interface_obj
+                )
+            except StopIteration:
+                continue
+            snapshot.append((destination_hash, list(entry), slot))
+    return snapshot
+
+
+def reload_interface_preserving_paths(reticulum, interface_name):
+    """
+    LCS: reload one interface without throwing away the routes learned on it.
+
+    `Reticulum.reload_interface` detaches the interface and re-attaches a fresh
+    object. That is what makes `AutoInterface` re-enumerate NICs, but it also
+    means every path table entry still points at the detached object — and
+    `Transport.jobs()` culls exactly those:
+
+        elif not attached_interface in Transport.interfaces:
+            ... "removed since the attached interface no longer exists"
+
+    So a bare reload silently drops every route learned through the interface,
+    within seconds. Nothing brings them back either: the path table is only
+    read from storage inside `Transport.start`, so unlike a full stack restart
+    a reload has no reload-from-disk behind it, and the next persistence flush
+    writes the loss through to the saved table.
+
+    This takes the entries first, reloads, then re-inserts them against the new
+    object, which is the same rebinding `Transport.start` does when it resolves
+    a stored entry through `find_interface_from_hash`. Entries re-inserted here
+    point at an interface that *is* in `Transport.interfaces`, so a cull racing
+    us afterwards leaves them alone.
+
+    Returns True only if the interface was actually reloaded.
+    """
+    old_interface = _interface_named(interface_name)
+    if old_interface is None:
+        # Not attached, so there is nothing to reload and nothing to preserve.
+        # reload_interface would return None here anyway.
+        RNS.log(
+            f"event_bridge: not reloading '{interface_name}', it is not attached",
+            RNS.LOG_DEBUG,
+        )
+        return False
+
+    try:
+        saved = _snapshot_paths_via(old_interface)
+    except Exception as e:  # noqa: BLE001 — never block the reload on bookkeeping
+        RNS.log(
+            f"event_bridge: could not snapshot paths for '{interface_name}': {e}",
+            RNS.LOG_ERROR,
+        )
+        saved = []
+
+    reloaded = reticulum.reload_interface(interface_name)
+    if not reloaded:
+        # Nothing was detached, so the paths are still valid as they stand.
+        RNS.log(
+            f"event_bridge: RNS declined to reload '{interface_name}'",
+            RNS.LOG_NOTICE,
+        )
+        return False
+
+    new_interface = _interface_named(interface_name)
+    if new_interface is None:
+        RNS.log(
+            f"event_bridge: '{interface_name}' reloaded but is not attached; "
+            f"{len(saved)} path(s) will be culled",
+            RNS.LOG_WARNING,
+        )
+        return True
+
+    restored = 0
+    try:
+        with RNS.Transport.path_table_lock:
+            for destination_hash, entry, slot in saved:
+                entry[slot] = new_interface
+                RNS.Transport.path_table[destination_hash] = entry
+                restored += 1
+    except Exception as e:  # noqa: BLE001 — a reloaded interface is still a win
+        RNS.log(
+            f"event_bridge: could not rebind paths for '{interface_name}': {e}",
+            RNS.LOG_ERROR,
+        )
+
+    RNS.log(
+        f"event_bridge: reloaded '{interface_name}' and kept {restored} "
+        f"of {len(saved)} learned path(s)",
+        RNS.LOG_NOTICE,
+    )
+    return True
+
+
 # ----------------------------------------------------------------------------
 # Module-level callback storage. Populated by register_callbacks().
 # ----------------------------------------------------------------------------
