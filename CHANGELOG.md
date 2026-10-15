@@ -46,6 +46,20 @@ changes including 2.1.1's transport-node default and 2.2.0's interface reload.
   navigation entry is saved and restored rather than popped. Re-tapping the
   NomadNet tab while browsing is a no-op; a site session ends via Close Site or
   Back.
+- **Ping destination** in the chat's three-dot menu, above Request path. Reports
+  whether the peer answers right now, the round-trip time and the hop count, and
+  says so immediately rather than after the probe finishes, since link
+  establishment can run to its timeout.
+  - Placed above Request path deliberately: ping is the diagnosis, Request path
+    the remedy. A `no_path` result names Request path as the next step.
+  - Nothing is delivered to the peer. The probe establishes or reuses an
+    `RNS.Link` and reads its metrics; it does not send an LXMF message, so a ping
+    cannot leave anything in the other side's chat. (`RnsCore.probeLinkSpeed`'s
+    own documentation claimed otherwise and was wrong — corrected.)
+  - Built on the existing link probe that the pre-dial codec picker already uses,
+    so no new backend surface was needed. That probe degrades to path-table
+    heuristics when a peer refuses a link, so a reachable result does not always
+    carry a round-trip figure.
 - Two new AIDL parcelables (`NomadnetMediaResult`, `NomadnetLinkStats`), three
   new seam methods, and two new `RnsError` variants.
 

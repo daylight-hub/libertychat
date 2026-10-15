@@ -163,6 +163,8 @@ class MessagingScreenTest {
         every { mockViewModel.locationSharingMessage } returns MutableSharedFlow()
         // LCS: "Request path" message-action result (Toast)
         every { mockViewModel.pathRequestMessage } returns MutableSharedFlow()
+        // LCS: "Ping destination" message-action result (Toast)
+        every { mockViewModel.linkProbeMessage } returns MutableSharedFlow()
         // Recent photos mock (share pictures feature)
         every { mockViewModel.recentPhotos } returns MutableStateFlow(emptyList())
         // Message font scale mock (text size dialog)

@@ -85,6 +85,7 @@ import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material3.AlertDialog
@@ -593,6 +594,15 @@ fun MessagingScreen(
     LaunchedEffect(viewModel) {
         viewModel.pathRequestMessage.collect { message ->
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // LCS: ping results. SHORT, because a ping emits twice — "Pinging…" and then
+    // the outcome — and a long first toast would still be on screen when the
+    // second arrives.
+    LaunchedEffect(viewModel) {
+        viewModel.linkProbeMessage.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1341,6 +1351,23 @@ fun MessagingScreen(
                                 onClick = {
                                     showOverflowMenu = false
                                     showTextSizeDialog = true
+                                },
+                            )
+                            // LCS: reachability check for this peer, above Request
+                            // path because it is the diagnosis and Request path is the
+                            // remedy. Establishes or reuses an RNS link and reports its
+                            // round-trip time; nothing is delivered to the peer.
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Speed,
+                                        contentDescription = null,
+                                    )
+                                },
+                                text = { Text("Ping destination") },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    viewModel.pingCurrentConversation()
                                 },
                             )
                             // LCS: on-demand route discovery for this peer. A path

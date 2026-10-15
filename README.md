@@ -132,6 +132,10 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
   timeout. Previously it expired after ten hours and was only ever re-taken on a
   network change, so a phone left on one Wi-Fi network stopped announcing to its
   AutoInterface peers and lost them to the 22-second peering timeout.
+- **Ping destination** in the chat's three-dot menu, above Request path: reports
+  whether the peer answers, the round-trip time and how many hops away they are.
+  Nothing is delivered to the peer — it establishes or reuses a Reticulum link
+  and reads its metrics, so it never puts a message in their chat.
 - **Request path** in the chat's three-dot menu, for asking on demand — when a
   repeater has just come back up, say, rather than waiting for the automatic
   attempt. A deliberate tap bypasses the rate limit.

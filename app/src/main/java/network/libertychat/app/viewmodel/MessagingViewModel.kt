@@ -22,6 +22,7 @@ import network.libertychat.app.rns.api.RnsCore
 import network.libertychat.app.rns.api.RnsLxmf
 import network.libertychat.app.rns.api.RnsTelephony
 import network.libertychat.app.rns.api.RnsTransportAdmin
+import network.libertychat.app.rns.api.model.LinkSpeedProbeResult
 import network.libertychat.app.rns.api.model.CallState
 import network.libertychat.app.service.ConversationLinkManager
 import network.libertychat.app.service.LocationSharingManager
@@ -48,6 +49,7 @@ import network.libertychat.app.ui.model.parseAudioAttachment
 import network.libertychat.app.ui.model.toMessageUi
 import network.libertychat.app.util.FileAttachment
 import network.libertychat.app.util.FileUtils
+import network.libertychat.app.util.HexUtils
 import network.libertychat.app.util.ImageUtils
 import network.libertychat.app.util.streamHexToFile
 import network.libertychat.app.util.validation.InputValidator
@@ -325,6 +327,15 @@ class MessagingViewModel
         // MessagingScreen and shown as a Toast.
         private val _pathRequestMessage = MutableSharedFlow<String>(extraBufferCapacity = 4)
         val pathRequestMessage: SharedFlow<String> = _pathRequestMessage.asSharedFlow()
+
+        /**
+         * LCS: one-line results from [pingCurrentConversation]. Kept separate from
+         * [pathRequestMessage] rather than renaming that into a shared channel,
+         * because the two are triggered by different menu items and a reader
+         * should be able to tell from the name which action produced a notice.
+         */
+        private val _linkProbeMessage = MutableSharedFlow<String>(extraBufferCapacity = 4)
+        val linkProbeMessage: SharedFlow<String> = _linkProbeMessage.asSharedFlow()
 
         // Image quality selection dialog state
         private val _qualitySelectionState = MutableStateFlow<QualitySelectionState?>(null)
@@ -2805,6 +2816,72 @@ class MessagingViewModel
             if (!hasImage) return false to null
             return true to withContext(Dispatchers.IO) { loadImageBytes(fieldsJson) }
         }
+
+        /**
+         * LCS: measure whether this peer is reachable right now, and how far off.
+         *
+         * Sits above Request path in the overflow menu because it answers the
+         * question a user usually has first — "is this even working?" — where
+         * Request path is the remedy rather than the diagnosis.
+         *
+         * Nothing is delivered to the peer. [RnsCore.probeLinkSpeed] establishes
+         * or reuses an `RNS.Link` and reads its metrics; it does not send an LXMF
+         * message, so a ping cannot leave anything in the other side's chat.
+         *
+         * The probe deliberately degrades to path-table heuristics instead of
+         * failing when a peer will not accept a link, so a reachable result with
+         * no round-trip figure is still informative: a route is known and its hop
+         * count with it, we just never got a link up to time.
+         */
+        fun pingCurrentConversation() {
+            viewModelScope.launch(pathRequestDispatcher) {
+                val destinationHash = _currentConversation.value
+                if (destinationHash.isNullOrBlank()) {
+                    Log.e(TAG, "Cannot ping: no conversation is open")
+                    _linkProbeMessage.emit("Open a conversation first.")
+                    return@launch
+                }
+
+                val destBytes =
+                    runCatching { HexUtils.hexToBytes(destinationHash) }
+                        .getOrElse { e ->
+                            Log.e(TAG, "Cannot ping malformed hash ${destinationHash.take(8)}...", e)
+                            _linkProbeMessage.emit("That conversation has a malformed address.")
+                            return@launch
+                        }
+
+                // Said up front because the probe waits on link establishment,
+                // which can run to its timeout — without this the menu closes and
+                // nothing appears to have happened for ten seconds.
+                _linkProbeMessage.emit("Pinging…")
+
+                val result =
+                    runCatching { rnsCore.probeLinkSpeed(destBytes) }
+                        .getOrElse { e ->
+                            Log.e(TAG, "Ping threw for ${destinationHash.take(8)}...", e)
+                            _linkProbeMessage.emit("Ping failed — the Reticulum service may be restarting.")
+                            return@launch
+                        }
+
+                _linkProbeMessage.emit(describeProbeResult(result))
+            }
+        }
+
+        /** One short line for a toast, per [LinkSpeedProbeResult.status]. */
+        private fun describeProbeResult(result: LinkSpeedProbeResult): String =
+            when (result.status) {
+                "success" ->
+                    buildString {
+                        append("Reachable")
+                        result.rttSeconds?.let { append(" — ${(it * 1000).toInt()} ms round trip") }
+                        result.hops?.let { append(", $it ${if (it == 1) "hop" else "hops"}") }
+                        if (result.linkReused) append(" (existing link)")
+                    }
+                "no_path" -> "No route to this peer. Try Request path."
+                "no_identity" -> "No identity known for this peer yet — they need to announce once."
+                "timeout" -> "No answer before the probe timed out. They may be offline."
+                else -> result.error?.let { "Ping failed: $it" } ?: "Ping failed."
+            }
 
         /**
          * LCS: ask the network for a route to the peer of the open conversation.

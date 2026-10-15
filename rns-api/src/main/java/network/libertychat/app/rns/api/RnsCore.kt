@@ -161,8 +161,17 @@ interface RnsCore {
     suspend fun getPathTableHashes(): List<String>
 
     /**
-     * Probe link speed to a destination by checking existing links or sending
-     * an empty LXMF message to establish one.
+     * Probe link speed to a destination by reusing an existing RNS link or
+     * establishing a fresh one.
+     *
+     * Nothing is delivered to the peer: the probe establishes an `RNS.Link` and
+     * reads its metrics, so it is safe to expose as a user-facing reachability
+     * check. (An earlier version of this comment said it sent an empty LXMF
+     * message; it does not, and has not since the python backend was written.)
+     *
+     * Degrades to path-table heuristics — hop count and first-hop bitrate —
+     * rather than failing outright when the peer will not accept a link, so a
+     * `success` result does not guarantee a round-trip figure.
      *
      * @param destinationHash The destination to probe (16 bytes)
      * @param timeoutSeconds How long to wait for link establishment (default 10s)

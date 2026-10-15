@@ -27,6 +27,7 @@ import network.libertychat.app.rns.api.model.DeliveryStatus
 import network.libertychat.app.rns.api.model.DeliveryStatusUpdate
 import network.libertychat.app.rns.api.model.Direction
 import network.libertychat.app.rns.api.model.Identity
+import network.libertychat.app.rns.api.model.LinkSpeedProbeResult
 import network.libertychat.app.rns.api.model.MessageReceipt
 import network.libertychat.app.ui.model.CodecProfile
 import network.libertychat.app.rns.api.model.TransferPhase
@@ -6323,5 +6324,130 @@ class MessagingViewModelTest {
 
             assertTrue("Emission should complete", emitResult.isSuccess)
             coVerify(exactly = 0) { identityResolutionManager.forcePathRequest(any(), any()) }
+        }
+
+    // ========== LCS: PING / LINK PROBE TESTS ==========
+
+    /** Same shape as [collectingPathMessages], for the separate ping channel. */
+    private suspend fun TestScope.collectingProbeMessages(block: suspend () -> Unit): List<String> {
+        val received = mutableListOf<String>()
+        val collector = launch { viewModel.linkProbeMessage.collect { received += it } }
+        advanceUntilIdle()
+        block()
+        advanceUntilIdle()
+        collector.cancel()
+        return received
+    }
+
+    private fun probeResult(
+        status: String,
+        rttSeconds: Double? = null,
+        hops: Int? = null,
+        linkReused: Boolean = false,
+        error: String? = null,
+    ) = LinkSpeedProbeResult(
+        status = status,
+        establishmentRateBps = null,
+        expectedRateBps = null,
+        rttSeconds = rttSeconds,
+        hops = hops,
+        linkReused = linkReused,
+        error = error,
+    )
+
+    @Test
+    fun `pingCurrentConversation probes the open peer and reports round trip and hops`() =
+        runViewModelTest {
+            viewModel.loadMessages(testPeerHash)
+            advanceUntilIdle()
+            val probed = slot<ByteArray>()
+            coEvery { rnsCore.probeLinkSpeed(capture(probed), any(), any()) } returns
+                probeResult("success", rttSeconds = 0.25, hops = 2)
+
+            val messages = collectingProbeMessages { viewModel.pingCurrentConversation() }
+
+            // Probed the conversation's peer, as bytes rather than the hex string.
+            assertEquals(testPeerHash, probed.captured.joinToString("") { "%02x".format(it) })
+            // Says something immediately, because the probe can run to its timeout.
+            assertTrue("Should acknowledge first, was: $messages", messages.first().contains("Pinging"))
+            val outcome = messages.last()
+            assertTrue("Should report reachable, was: $outcome", outcome.contains("Reachable"))
+            assertTrue("Should report the round trip, was: $outcome", outcome.contains("250 ms"))
+            assertTrue("Should report the hop count, was: $outcome", outcome.contains("2 hops"))
+        }
+
+    @Test
+    fun `pingCurrentConversation singularises a one hop result`() =
+        runViewModelTest {
+            viewModel.loadMessages(testPeerHash)
+            advanceUntilIdle()
+            coEvery { rnsCore.probeLinkSpeed(any(), any(), any()) } returns
+                probeResult("success", rttSeconds = 0.04, hops = 1)
+
+            val outcome = collectingProbeMessages { viewModel.pingCurrentConversation() }.last()
+
+            assertTrue("Was: $outcome", outcome.contains("1 hop"))
+            assertFalse("Should not say '1 hops', was: $outcome", outcome.contains("1 hops"))
+        }
+
+    @Test
+    fun `pingCurrentConversation points at Request path when no route is known`() =
+        runViewModelTest {
+            // The two menu items are a pair: this one diagnoses, the other remedies.
+            viewModel.loadMessages(testPeerHash)
+            advanceUntilIdle()
+            coEvery { rnsCore.probeLinkSpeed(any(), any(), any()) } returns probeResult("no_path")
+
+            val outcome = collectingProbeMessages { viewModel.pingCurrentConversation() }.last()
+
+            assertTrue("Was: $outcome", outcome.contains("No route"))
+            assertTrue("Should name the remedy, was: $outcome", outcome.contains("Request path"))
+        }
+
+    @Test
+    fun `pingCurrentConversation reports a timeout as possibly offline`() =
+        runViewModelTest {
+            viewModel.loadMessages(testPeerHash)
+            advanceUntilIdle()
+            coEvery { rnsCore.probeLinkSpeed(any(), any(), any()) } returns probeResult("timeout")
+
+            val outcome = collectingProbeMessages { viewModel.pingCurrentConversation() }.last()
+
+            assertTrue("Was: $outcome", outcome.contains("offline"))
+        }
+
+    @Test
+    fun `pingCurrentConversation surfaces a backend error message`() =
+        runViewModelTest {
+            viewModel.loadMessages(testPeerHash)
+            advanceUntilIdle()
+            coEvery { rnsCore.probeLinkSpeed(any(), any(), any()) } returns
+                probeResult("error", error = "link establishment refused")
+
+            val outcome = collectingProbeMessages { viewModel.pingCurrentConversation() }.last()
+
+            assertTrue("Was: $outcome", outcome.contains("link establishment refused"))
+        }
+
+    @Test
+    fun `pingCurrentConversation survives the probe throwing`() =
+        runViewModelTest {
+            // A dead binder to the :reticulum process throws rather than returning.
+            viewModel.loadMessages(testPeerHash)
+            advanceUntilIdle()
+            coEvery { rnsCore.probeLinkSpeed(any(), any(), any()) } throws IllegalStateException("binder died")
+
+            val outcome = collectingProbeMessages { viewModel.pingCurrentConversation() }.last()
+
+            assertTrue("Was: $outcome", outcome.contains("Ping failed"))
+        }
+
+    @Test
+    fun `pingCurrentConversation does nothing with no conversation open`() =
+        runViewModelTest {
+            // rnsCore.probeLinkSpeed is left unstubbed on purpose: reaching it throws.
+            val messages = collectingProbeMessages { viewModel.pingCurrentConversation() }
+
+            assertEquals(listOf("Open a conversation first."), messages)
         }
 }
