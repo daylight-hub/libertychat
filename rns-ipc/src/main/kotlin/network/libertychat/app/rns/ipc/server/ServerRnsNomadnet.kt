@@ -46,6 +46,24 @@ internal class ServerRnsNomadnet(
         Bundle.EMPTY
     }
 
+    override fun requestNomadnetMedia(
+        destinationHash: String,
+        path: String,
+        timeoutSeconds: Float,
+        maxBytes: Long,
+        cb: IRnsResultCallback,
+    ) = dispatch(cb, scope) {
+        val media = impl.requestNomadnetMedia(destinationHash, path, timeoutSeconds, maxBytes).getOrThrow()
+        Bundle().apply { putParcelable(BundleKeys.MEDIA, media) }
+    }
+
+    override fun getNomadnetLinkStats(
+        destinationHash: String,
+        cb: IRnsResultCallback,
+    ) = dispatch(cb, scope) {
+        Bundle().apply { putParcelable(BundleKeys.STATS, impl.getNomadnetLinkStats(destinationHash)) }
+    }
+
     override fun getNomadnetRequestStatus(cb: IRnsStringCallback) = dispatchNullableString(cb, scope) {
         impl.getNomadnetRequestStatus()
     }
@@ -57,6 +75,12 @@ internal class ServerRnsNomadnet(
     override fun identifyNomadnetLink(destinationHash: String, cb: IRnsBoolCallback) =
         dispatchBool(cb, scope) {
             impl.identifyNomadnetLink(destinationHash).getOrThrow()
+        }
+
+    override fun setIdentifyOnConnectNodes(nodes: Array<out String>, cb: IRnsResultCallback) =
+        dispatch(cb, scope) {
+            impl.setIdentifyOnConnectNodes(nodes.toSet())
+            Bundle.EMPTY
         }
 
     override fun registerRequestStatusObserver(cb: IRnsStringEventCallback) = statusHub.registerObserver(cb)

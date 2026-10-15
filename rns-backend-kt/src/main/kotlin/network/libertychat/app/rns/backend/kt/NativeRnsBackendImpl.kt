@@ -2286,11 +2286,25 @@ class NativeRnsBackendImpl(
         nomadNetHandler.requestStatusFlow.value = "cancelled"
     }
 
+    override suspend fun requestNomadnetMedia(
+        destinationHash: String,
+        path: String,
+        timeoutSeconds: Float,
+        maxBytes: Long,
+    ): Result<network.libertychat.app.rns.api.model.NomadnetMediaResult> =
+        nomadNetHandler.requestNomadnetMedia(destinationHash, path, timeoutSeconds, maxBytes)
+
+    override suspend fun getNomadnetLinkStats(destinationHash: String): network.libertychat.app.rns.api.model.NomadnetLinkStats? =
+        nomadNetHandler.getLinkStats(destinationHash)
+
     override suspend fun getNomadnetRequestStatus(): String = nomadNetHandler.requestStatusFlow.value
 
     override suspend fun getNomadnetDownloadProgress(): Float = nomadNetHandler.downloadProgressFlow.value
 
     override suspend fun identifyNomadnetLink(destinationHash: String): Result<Boolean> = nomadNetHandler.identifyNomadnetLink(destinationHash)
+
+    override suspend fun setIdentifyOnConnectNodes(nodes: Set<String>) =
+        nomadNetHandler.setIdentifyOnConnectNodes(nodes)
 
     // ==================== Version Info ====================
 

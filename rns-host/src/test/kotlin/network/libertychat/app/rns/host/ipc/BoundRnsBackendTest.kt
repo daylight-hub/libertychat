@@ -41,6 +41,7 @@ import network.libertychat.app.rns.api.model.LinkSpeedProbeResult
 import network.libertychat.app.rns.api.model.LocationTelemetry
 import network.libertychat.app.rns.api.model.MessageReceipt
 import network.libertychat.app.rns.api.model.NetworkStatus
+import network.libertychat.app.rns.api.model.NomadnetLinkStats
 import network.libertychat.app.rns.api.model.NomadnetPageResult
 import network.libertychat.app.rns.api.model.PacketReceipt
 import network.libertychat.app.rns.api.model.PacketType
@@ -423,9 +424,12 @@ class BoundRnsBackendTest {
     private class StubRnsNomadnet : RnsNomadnet {
         override suspend fun requestNomadnetPage(destinationHash: String, path: String, formDataJson: String?, timeoutSeconds: Float): Result<NomadnetPageResult> = error("not used")
         override suspend fun cancelNomadnetPageRequest() {}
+        override suspend fun requestNomadnetMedia(destinationHash: String, path: String, timeoutSeconds: Float): Result<network.libertychat.app.rns.api.model.NomadnetMediaResult> = error("not used")
+        override suspend fun getNomadnetLinkStats(destinationHash: String): NomadnetLinkStats? = null
         override suspend fun getNomadnetRequestStatus(): String = "idle"
         override suspend fun getNomadnetDownloadProgress(): Float = 0f
         override suspend fun identifyNomadnetLink(destinationHash: String) = Result.success(false)
+        override suspend fun setIdentifyOnConnectNodes(nodes: Set<String>) {}
         override val nomadnetRequestStatusFlow: StateFlow<String> = MutableStateFlow("idle").asStateFlow()
         override val nomadnetDownloadProgressFlow: StateFlow<Float> = MutableStateFlow(0f).asStateFlow()
     }

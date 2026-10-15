@@ -9,6 +9,54 @@ upstream; upstream's own history is not repeated here.
 
 ---
 
+## 2.3.0 — unreleased
+
+Catch-up with upstream Columba's NomadNet work: 51 commits spanning
+`torlando-tech/columba` between the fork point and `main`. LCS had never made a
+functional change anywhere in the NomadNet or Micron subsystem — every shared
+file was byte-identical to upstream once the package namespace was normalised —
+so these files are upstream's, carried across rather than hand-merged. The
+fourteen files LCS *had* diverged on (MainActivity, SettingsRepository and
+friends) were merged three-way against upstream-at-fork, keeping LCS's own
+changes including 2.1.1's transport-node default and 2.2.0's interface reload.
+
+### Added
+
+- **Inline page images.** Micron image tags are parsed and rendered in the
+  NomadNet browser, with a per-image loading policy, an image cache, and a
+  `/media` request on the `RnsNomadnet` seam. Images can be tapped to reload
+  individually, respect percent widths as parent-relative fractions, and honour
+  left/right alignment. Saved images land in `Pictures/Liberty Chat`.
+  - New image-loading mode setting, so images can be off, on-demand or automatic.
+- **Identify.** Saved nodes are identified to at link establishment, auto-identify
+  is remembered per destination, and the link is torn down when a node is
+  unflagged. Includes upstream's hardening for concurrent requests and for a
+  stale identify completing after navigation.
+- **User-configurable bottom navigation.** The bar's tabs and their order are
+  chosen in Settings, with Settings pinned last and a five-tab ceiling. NomadNet
+  is available as a tab; upstream's default bar — Chats, Contacts, Map, Settings
+  — is unchanged, so nothing moves unless you change it.
+- **NomadNet keeps its session across tab switches.** Moving to another tab and
+  back leaves the page you left on screen with no re-fetch, because the
+  navigation entry is saved and restored rather than popped. Re-tapping the
+  NomadNet tab while browsing is a no-op; a site session ends via Close Site or
+  Back.
+- Two new AIDL parcelables (`NomadnetMediaResult`, `NomadnetLinkStats`), three
+  new seam methods, and two new `RnsError` variants.
+
+### Fixed
+
+- The NomadNet link is retried after waiting for route discovery on a cold
+  start, instead of failing because no path existed yet.
+- Refreshing or retrying a page that carries variables rebuilds its request data
+  from the displayed page's own tokens, rather than losing it.
+- The backtick field block is preserved and displayed.
+- A flagged node's pages are re-fetched rather than served from cache, including
+  on Back navigation.
+- Deep page position and link reuse survive leaving and re-entering the tab.
+
+---
+
 ## 2.2.0 — 2026-10-15
 
 ### Changed

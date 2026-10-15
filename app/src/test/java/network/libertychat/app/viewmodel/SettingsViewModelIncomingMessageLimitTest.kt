@@ -5,6 +5,7 @@ import network.libertychat.app.data.db.entity.LocalIdentityEntity
 import network.libertychat.app.data.repository.IdentityRepository
 import network.libertychat.app.map.MapTileSourceManager
 import network.libertychat.app.repository.InterfaceRepository
+import network.libertychat.app.repository.NomadNetLastPage
 import network.libertychat.app.repository.SettingsRepository
 import network.libertychat.app.rns.api.model.InterfaceConfig
 import network.libertychat.app.rns.api.model.NetworkStatus
@@ -106,6 +107,8 @@ class SettingsViewModelIncomingMessageLimitTest {
         SettingsViewModel.enableMonitors = false
 
         settingsRepository = mockk()
+        every { settingsRepository.bottomNavTabsFlow } returns flowOf(null)
+        every { settingsRepository.nomadNetLastPageFlow } returns flowOf(NomadNetLastPage(null, null))
         identityRepository = mockk()
         rnsBackend = mockk()
         rnsCore = mockk()

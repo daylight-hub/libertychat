@@ -22,12 +22,30 @@ oneway interface IRnsNomadnet {
 
     void cancelNomadnetPageRequest(in IRnsResultCallback cb);
 
+    // requestNomadnetMedia → "media": NomadnetMediaResult
+    // maxBytes: transfer cap; Long.MAX_VALUE = no cap. The backend fails the
+    // fetch (RnsError.NomadnetResponseTooLarge) if the node delivers more.
+    void requestNomadnetMedia(
+        String destinationHash,
+        String path,
+        float timeoutSeconds,
+        long maxBytes,
+        in IRnsResultCallback cb);
+
+    // getNomadnetLinkStats → "stats": NomadnetLinkStats; null when no active link
+    void getNomadnetLinkStats(String destinationHash, in IRnsResultCallback cb);
+
     // Snapshot getters for the request status / download progress flows.
     void getNomadnetRequestStatus(in IRnsStringCallback cb);
     void getNomadnetDownloadProgress(in IRnsFloatCallback cb);
 
     // Result<Boolean>: use IRnsBoolCallback (carries onError for the suspend boundary).
     void identifyNomadnetLink(String destinationHash, in IRnsBoolCallback cb);
+
+    // Set the per-node auto-identify flags. The backend identifies a node's
+    // link at establishment time (upstream link_established +
+    // should_identify_on_connect) when the node is in the set.
+    void setIdentifyOnConnectNodes(in String[] nodes, in IRnsResultCallback cb);
 
     // StateFlow<String> status: observer register/unregister.
     void registerRequestStatusObserver(in IRnsStringEventCallback cb);

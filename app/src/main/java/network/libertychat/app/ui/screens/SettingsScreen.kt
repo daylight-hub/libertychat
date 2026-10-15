@@ -62,6 +62,7 @@ import network.libertychat.app.util.safeOpenUrl
 import network.libertychat.app.ui.screens.settings.cards.AdvancedCard
 import network.libertychat.app.ui.screens.settings.cards.AutoAnnounceCard
 import network.libertychat.app.ui.screens.settings.cards.BatteryOptimizationCard
+import network.libertychat.app.ui.screens.settings.cards.BottomNavigationCard
 import network.libertychat.app.ui.screens.settings.cards.DataMigrationCard
 import network.libertychat.app.ui.screens.settings.cards.IdentityCard
 import network.libertychat.app.ui.screens.settings.cards.ImageCompressionCard
@@ -521,6 +522,13 @@ fun SettingsScreen(
                         state.detectedCompressionPreset ==
                             network.libertychat.app.data.model.ImageCompressionPreset.LOW,
                     onPresetChange = { viewModel.setImageCompressionPreset(it) },
+                )
+
+                BottomNavigationCard(
+                    isExpanded = state.cardExpansionStates[SettingsCardId.BOTTOM_NAVIGATION.name] ?: false,
+                    onExpandedChange = { viewModel.toggleCardExpanded(SettingsCardId.BOTTOM_NAVIGATION, it) },
+                    tabs = state.bottomNavTabs,
+                    onTabsChange = { viewModel.setBottomNavTabs(it) },
                 )
 
                 ThemeSelectionCard(

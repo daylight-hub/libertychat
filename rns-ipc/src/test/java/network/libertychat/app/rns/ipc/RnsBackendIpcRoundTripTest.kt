@@ -44,6 +44,7 @@ import network.libertychat.app.rns.api.model.LinkSpeedProbeResult
 import network.libertychat.app.rns.api.model.LinkStatus
 import network.libertychat.app.rns.api.model.MessageReceipt
 import network.libertychat.app.rns.api.model.NetworkStatus
+import network.libertychat.app.rns.api.model.NomadnetLinkStats
 import network.libertychat.app.rns.api.model.NomadnetPageResult
 import network.libertychat.app.rns.api.model.PacketReceipt
 import network.libertychat.app.rns.api.model.PacketType
@@ -771,9 +772,16 @@ private class FakeRnsNomadnet : RnsNomadnet {
         timeoutSeconds: Float,
     ): Result<NomadnetPageResult> = Result.failure(NotImplementedError())
     override suspend fun cancelNomadnetPageRequest() {}
+    override suspend fun requestNomadnetMedia(
+        destinationHash: String,
+        path: String,
+        timeoutSeconds: Float,
+    ): Result<network.libertychat.app.rns.api.model.NomadnetMediaResult> = Result.failure(NotImplementedError())
+    override suspend fun getNomadnetLinkStats(destinationHash: String): NomadnetLinkStats? = null
     override suspend fun getNomadnetRequestStatus(): String = status.value
     override suspend fun getNomadnetDownloadProgress(): Float = progress.value
     override suspend fun identifyNomadnetLink(destinationHash: String) = Result.success(true)
+    override suspend fun setIdentifyOnConnectNodes(nodes: Set<String>) {}
     override val nomadnetRequestStatusFlow: StateFlow<String> get() = status.asStateFlow()
     override val nomadnetDownloadProgressFlow: StateFlow<Float> get() = progress.asStateFlow()
 }

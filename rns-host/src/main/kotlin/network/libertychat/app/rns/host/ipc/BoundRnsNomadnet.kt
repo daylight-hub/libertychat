@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import network.libertychat.app.rns.api.RnsBackend
 import network.libertychat.app.rns.api.RnsNomadnet
+import network.libertychat.app.rns.api.model.NomadnetLinkStats
+import network.libertychat.app.rns.api.model.NomadnetMediaResult
 import network.libertychat.app.rns.api.model.NomadnetPageResult
 
 /**
@@ -39,6 +41,17 @@ internal class BoundRnsNomadnet(
         awaitBound().nomadnet.cancelNomadnetPageRequest()
     }
 
+    override suspend fun requestNomadnetMedia(
+        destinationHash: String,
+        path: String,
+        timeoutSeconds: Float,
+        maxBytes: Long,
+    ): Result<NomadnetMediaResult> =
+        awaitBound().nomadnet.requestNomadnetMedia(destinationHash, path, timeoutSeconds, maxBytes)
+
+    override suspend fun getNomadnetLinkStats(destinationHash: String): NomadnetLinkStats? =
+        runCatching { awaitBound().nomadnet.getNomadnetLinkStats(destinationHash) }.getOrNull()
+
     override suspend fun getNomadnetRequestStatus(): String =
         awaitBound().nomadnet.getNomadnetRequestStatus()
 
@@ -47,6 +60,10 @@ internal class BoundRnsNomadnet(
 
     override suspend fun identifyNomadnetLink(destinationHash: String): Result<Boolean> =
         awaitBound().nomadnet.identifyNomadnetLink(destinationHash)
+
+    override suspend fun setIdentifyOnConnectNodes(nodes: Set<String>) {
+        awaitBound().nomadnet.setIdentifyOnConnectNodes(nodes)
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override val nomadnetRequestStatusFlow: StateFlow<String> =

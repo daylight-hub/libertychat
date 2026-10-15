@@ -66,6 +66,23 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
 - Built-in RNode flasher entry removed from Settings — LCS ships pre-flashed
   hardware.
 
+### NomadNet
+
+- **Pages render inline images**, with a loading-mode setting (off, on demand, or
+  automatic), a per-image tap to reload, and an image cache. Saved images go to
+  `Pictures/Liberty Chat`.
+- **Identify** to saved nodes happens at link establishment, and auto-identify is
+  remembered per node rather than per session.
+- **Browsing survives tab switches** — leave the NomadNet tab and come back and
+  the page is still there, with no re-fetch.
+- The link is retried after route discovery on a cold start, so a first visit
+  doesn't fail just because no path existed yet.
+
+### Navigation
+
+- **The bottom bar is configurable** in Settings: choose which tabs appear and in
+  what order, up to five, with Settings pinned last. NomadNet can be one of them.
+
 ### Network
 
 - No TCP bootstrap interface is seeded. A fresh install comes up on

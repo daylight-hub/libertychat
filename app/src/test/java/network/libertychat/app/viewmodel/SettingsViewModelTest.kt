@@ -7,6 +7,7 @@ import network.libertychat.app.data.repository.ContactRepository
 import network.libertychat.app.data.repository.IdentityRepository
 import network.libertychat.app.map.MapTileSourceManager
 import network.libertychat.app.repository.InterfaceRepository
+import network.libertychat.app.repository.NomadNetLastPage
 import network.libertychat.app.repository.SettingsRepository
 import network.libertychat.app.rns.api.model.BatteryProfile
 import network.libertychat.app.rns.api.model.NetworkStatus
@@ -170,6 +171,8 @@ class SettingsViewModelTest {
         // Setup repository flow mocks
         every { settingsRepository.preferOwnInstanceFlow } returns preferOwnInstanceFlow
         every { settingsRepository.isSharedInstanceFlow } returns isSharedInstanceFlow
+        every { settingsRepository.bottomNavTabsFlow } returns flowOf(null)
+        every { settingsRepository.nomadNetLastPageFlow } returns flowOf(NomadNetLastPage(null, null))
         every { settingsRepository.shareInstanceHostingEnabledFlow } returns shareInstanceHostingEnabledFlow
         coEvery { settingsRepository.getShareInstanceHostingEnabled() } returns false
         coEvery { settingsRepository.saveShareInstanceHostingEnabled(any()) } returns Unit
