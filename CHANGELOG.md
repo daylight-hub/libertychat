@@ -9,7 +9,7 @@ upstream; upstream's own history is not repeated here.
 
 ---
 
-## 2.3.0 — unreleased
+## 2.3.0 — 2026-10-15
 
 Catch-up with upstream Columba's NomadNet work: 51 commits spanning
 `torlando-tech/columba` between the fork point and `main`. LCS had never made a
