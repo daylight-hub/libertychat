@@ -9,6 +9,45 @@ upstream; upstream's own history is not repeated here.
 
 ---
 
+## 2.3.1 — unreleased
+
+### Fixed
+
+- **A path request now expires the path it was asked about, so it can actually
+  replace it.** This is the "Request path says it found them, but messages still
+  don't arrive until the other side announces" case.
+  Path requests are answered from a **cached announce**: whoever holds a path
+  replays it out of their packet cache, carrying that announce's *original*
+  emission timestamp. `Transport._inbound` only overwrites an existing path table
+  entry if the announce has a strictly lower hop count, the path has expired,
+  `announce_emitted > path_announce_emitted`, or the timestamps are equal **and**
+  the path is marked unresponsive (RNS 1.5.5 `Transport.py:2253-2295`). A
+  replayed cached announce carries the timestamp already on record, so the reply
+  was discarded and the broken path survived — while `has_path()` kept returning
+  true, which is exactly why Ping and Request path both reported success.
+  `requestPath` now calls `expire_path` before `request_path`. That is the lever
+  rather than `mark_path_unresponsive`, which only unlocks the equal-timestamp
+  branch and still refuses a replayed announce *older* than the entry.
+  `expire_path` zeroes the entry's timestamp and resets `tables_last_culled`, so
+  the next `jobs()` pass drops it outright and any announce is then accepted.
+  This is the same `expire_path` + `request_path` ordering
+  `PythonRnsNomadnet.waitForRouteAppears` has always used for NomadNet links;
+  messaging never adopted it.
+- **A peer who changes identity is picked up instead of being encrypted to their
+  old key.** `PythonRnsLxmf` caches one `RNS.Destination` per recipient, and a
+  destination freezes the `RNS.Identity` it was built from; the cache was only
+  cleared on a full stack teardown. So after a peer reinstalled, moved to a new
+  phone or regenerated their keys, every message was still encrypted to the
+  previous public key — undecryptable for them, and completely successful-looking
+  here. The cache is now validated against the currently recalled identity on
+  every send. A *mismatch* invalidates; an *unknown* current identity
+  deliberately does not, since the frozen identity beats nothing and discarding
+  it would turn a sendable peer into `IdentityNotFound`. Ratchets were never
+  affected — `Destination.encrypt` resolves those per call via
+  `Identity.get_ratchet`.
+
+---
+
 ## 2.3.0 — 2026-10-15
 
 Catch-up with upstream Columba's NomadNet work: 51 commits spanning

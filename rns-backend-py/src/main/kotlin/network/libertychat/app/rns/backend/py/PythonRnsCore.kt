@@ -353,9 +353,48 @@ class PythonRnsCore(
                 ?.toJava(Boolean::class.javaObjectType) ?: false
         }
 
+    /**
+     * LCS: expire the known path, then ask the network for a new one.
+     *
+     * The expiry is not housekeeping — without it this call cannot fix the thing
+     * it exists to fix, which is the "Request path says it found them but
+     * messages still don't arrive until the other side announces" case.
+     *
+     * Path requests are answered from a **cached announce**: whoever holds a path
+     * replays `path_table[dest][IDX_PT_PACKET]` out of their packet cache,
+     * carrying that announce's *original* emission timestamp. When the reply
+     * arrives, `Transport._inbound` only overwrites an existing entry if the
+     * announce has a strictly lower hop count, or the path has expired, or
+     * `announce_emitted > path_announce_emitted`, or the timestamps are equal
+     * **and** `path_is_unresponsive(dest)` (RNS 1.5.5 `Transport.py:2253-2295`).
+     * A replayed cached announce carries the timestamp we already recorded, so
+     * none of those hold and the reply is discarded — while `has_path()` keeps
+     * returning true, which is why both Ping and Request path reported success
+     * while nothing changed. Only a freshly emitted announce has a newer
+     * timestamp, which is why waiting for the peer to announce was the only cure.
+     *
+     * `expire_path` is the right lever rather than `mark_path_unresponsive`:
+     * marking only unlocks the equal-timestamp branch, so a replayed announce
+     * *older* than our entry is still refused. `expire_path` zeroes the entry's
+     * timestamp and resets `tables_last_culled`, so the next `jobs()` pass drops
+     * the entry outright — and with no entry to compare against, any announce is
+     * accepted.
+     *
+     * This is the same `expire_path` + `request_path` ordering
+     * `PythonRnsNomadnet.waitForRouteAppears` has always used for NomadNet links,
+     * which messaging simply never adopted.
+     *
+     * The cost is deliberate: if the path happened to be fine, it is dropped and
+     * has to come back. Every caller here is either a user tapping Request path
+     * or a send that just failed, so the existing entry has already proven
+     * useless or is under suspicion.
+     */
     override suspend fun requestPath(destinationHash: ByteArray): Result<Unit> =
         pyResult {
-            transport().callAttr("request_path", destinationHash.toPyBytes())
+            val hashPy = destinationHash.toPyBytes()
+            runCatching { transport().callAttr("expire_path", hashPy) }
+                .onFailure { e -> Log.w(TAG, "Could not expire the stale path before requesting", e) }
+            transport().callAttr("request_path", hashPy)
             Unit
         }
 

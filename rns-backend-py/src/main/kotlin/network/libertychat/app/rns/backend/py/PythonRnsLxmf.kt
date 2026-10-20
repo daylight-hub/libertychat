@@ -461,15 +461,49 @@ class PythonRnsLxmf(
      * "delivery")` — the same shape `NativeMessageSender` uses. If the identity
      * is not yet known a path is requested and we poll briefly.
      */
+    /** Identity hash of an `RNS.Identity`, or of the identity an `RNS.Destination` holds. */
+    private fun identityHashHex(identity: PyObject?): String? =
+        identity?.get("hash")?.toJava(ByteArray::class.java)?.toHex()
+
     private fun resolveRecipientDestination(destinationHash: ByteArray): PyObject {
         val hex = destinationHash.toHex()
-        runtime.destinations[hex]?.let { return it }
 
         val identityClass = runtime.rnsModule["Identity"] ?: error("RNS.Identity missing")
         val destClass = runtime.rnsModule["Destination"] ?: error("RNS.Destination missing")
         val hashPy = destinationHash.toPyBytes()
 
         var recipientIdentity = identityClass.callAttr("recall", hashPy)
+
+        // LCS: the cache is checked against the currently recalled identity rather
+        // than trusted outright.
+        //
+        // An `RNS.Destination` freezes the `RNS.Identity` it was built from, and
+        // this map is only cleared when the whole stack is torn down. So a peer who
+        // re-announced under a new identity — reinstalled, moved to a new phone,
+        // regenerated their keys — kept being encrypted to their *old* public key
+        // for the life of the process. The send succeeds locally and the peer can
+        // never decrypt it, which looks exactly like a routing problem from this
+        // side. Ratchets are not affected: `Destination.encrypt` looks those up
+        // per-call via `Identity.get_ratchet(hash)`, so only the identity itself
+        // can go stale here.
+        //
+        // A null recall deliberately keeps the cached destination instead of
+        // dropping it: that means RNS has no key on file, and the cached identity
+        // is better than nothing. Only a *different* identity invalidates.
+        runtime.destinations[hex]?.let { cached ->
+            val cachedHash = identityHashHex(cached["identity"])
+            val currentHash = identityHashHex(recipientIdentity)
+            if (shouldReuseCachedDestination(cachedHash, currentHash)) {
+                return cached
+            }
+            Log.i(
+                TAG,
+                "Identity for ${hex.take(16)} changed (${cachedHash.take(8)} -> " +
+                    "${currentHash.take(8)}); rebuilding its destination",
+            )
+            runtime.destinations.remove(hex)
+        }
+
         if (recipientIdentity == null) {
             Log.d(TAG, "Recipient identity not cached, requesting path for ${hex.take(16)}")
             transport().callAttr("request_path", hashPy)
@@ -859,3 +893,26 @@ class PythonRnsLxmf(
         return Identity(hash = hash, publicKey = pub, privateKey = prv)
     }
 }
+
+/**
+ * LCS: whether a cached recipient `RNS.Destination` is still safe to send through.
+ *
+ * Reuse unless we can see that the peer's identity has actually been replaced.
+ * An unknown current identity ([currentIdentityHash] null, meaning
+ * `Identity.recall` has no key on file) keeps the cache rather than discarding
+ * it: the frozen identity in the cached destination is the better of the two,
+ * and throwing it away would turn a sendable peer into `IdentityNotFound`.
+ *
+ * Only a definite mismatch invalidates — the peer reinstalled, moved phones, or
+ * regenerated their keys, and anything encrypted to the old public key would be
+ * undecryptable on their side while looking perfectly successful on ours.
+ */
+internal fun shouldReuseCachedDestination(
+    cachedIdentityHash: String?,
+    currentIdentityHash: String?,
+): Boolean =
+    when {
+        currentIdentityHash == null -> true
+        cachedIdentityHash == null -> true
+        else -> cachedIdentityHash == currentIdentityHash
+    }
