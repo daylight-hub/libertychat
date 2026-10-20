@@ -33,6 +33,21 @@ upstream; upstream's own history is not repeated here.
   This is the same `expire_path` + `request_path` ordering
   `PythonRnsNomadnet.waitForRouteAppears` has always used for NomadNet links;
   messaging never adopted it.
+- **The automatic path request after a failed send now actually fires.** It was
+  wired to `MessagingViewModel`, which `hiltViewModel()` scopes to the chat
+  screen's navigation entry — so it existed only while that conversation was
+  open. Delivery failure is not immediate: LXMF exhausts its own delivery
+  attempts first, and with a propagation node configured the fallback runs before
+  anything terminal is reported. By then the user has usually navigated away, and
+  with the only collector on a cleared `viewModelScope` nothing happened at all —
+  no path request, and the message's status was never even written, so it sat on
+  "sending" indefinitely.
+  Delivery status is now applied by `DeliveryStatusCollector`, an
+  application-level service started alongside `MessageCollector` — whose own
+  documentation already said it "solves the issue where data was only collected
+  when specific screens were active". Delivery status had simply been left behind.
+  Nothing in that path touched UI state; the chat screen reads its messages from
+  Room, so the display updates exactly as before.
 - **A peer who changes identity is picked up instead of being encrypted to their
   old key.** `PythonRnsLxmf` caches one `RNS.Destination` per recipient, and a
   destination freezes the `RNS.Identity` it was built from; the cache was only

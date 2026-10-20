@@ -77,6 +77,9 @@ class ColumbaApplication : Application() {
     lateinit var messageCollector: MessageCollector
 
     @Inject
+    lateinit var deliveryStatusCollector: network.libertychat.app.service.DeliveryStatusCollector
+
+    @Inject
     lateinit var conversationRepository: ConversationRepository
 
     @Inject
@@ -404,6 +407,7 @@ class ColumbaApplication : Application() {
                         )
                         // Identity matches - reconnect collectors and managers
                         messageCollector.startCollecting()
+                        deliveryStatusCollector.startCollecting()
                         autoAnnounceManager.start()
                         identityResolutionManager.start(applicationScope)
                         propagationNodeManager.start()
@@ -587,6 +591,7 @@ class ColumbaApplication : Application() {
 
                         // Start the message collector service after Reticulum is ready
                         messageCollector.startCollecting()
+                        deliveryStatusCollector.startCollecting()
                         autoAnnounceManager.start()
                         identityResolutionManager.start(applicationScope)
                         propagationNodeManager.start()
@@ -676,6 +681,7 @@ class ColumbaApplication : Application() {
         // Stop auto-announce manager, message collection, and identity resolution
         autoAnnounceManager.stop()
         messageCollector.stopCollecting()
+        deliveryStatusCollector.stopCollecting()
         identityResolutionManager.stop()
         interfaceTransportObserver.stop()
 

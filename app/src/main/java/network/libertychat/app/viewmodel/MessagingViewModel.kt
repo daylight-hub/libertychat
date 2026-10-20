@@ -16,7 +16,6 @@ import network.libertychat.app.data.model.ImageCompressionPreset
 import network.libertychat.app.data.repository.ReceivedLocationRepository
 import network.libertychat.app.repository.SettingsRepository
 import network.libertychat.app.rns.api.model.DeliveryMethod
-import network.libertychat.app.rns.api.model.DeliveryStatus
 import network.libertychat.app.rns.api.model.Identity
 import network.libertychat.app.rns.api.RnsCore
 import network.libertychat.app.rns.api.RnsLxmf
@@ -905,24 +904,12 @@ class MessagingViewModel
             // when sending messages, to avoid crashes during init when LXMF router
             // may not be ready yet.
 
-            // Collect delivery status updates and update database
-            // Safe to enable now that identity loading is lazy (doesn't crash init)
-            viewModelScope.launch {
-                try {
-                    rnsLxmf.observeDeliveryStatus().collect { update ->
-                        try {
-                            Log.d(TAG, "Delivery status update: ${update.messageHash.take(16)}... -> ${update.status}")
-                            handleDeliveryStatusUpdate(update)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error handling delivery status update", e)
-                        }
-                    }
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error collecting delivery status updates", e)
-                }
-            }
+            // NOTE: Delivery status collection has been moved to
+            // DeliveryStatusCollector, which runs at application level. This view
+            // model is scoped to the chat's navigation entry, so collecting here
+            // meant a failure arriving after the user left the conversation was
+            // never applied and never triggered a path request.
+            // See: network.libertychat.app.service.DeliveryStatusCollector
 
             viewModelScope.launch {
                 try {
@@ -995,160 +982,7 @@ class MessagingViewModel
             }
         }
 
-        private suspend fun handleDeliveryStatusUpdate(update: network.libertychat.app.rns.api.model.DeliveryStatusUpdate) {
-            try {
-                val originatingIdentityHash = update.originatingIdentityHash?.takeIf { it.isNotBlank() }
-                if (originatingIdentityHash == null) {
-                    Log.w(TAG, "Ignoring delivery status without trustworthy attempt identity")
-                    return
-                }
-                // Retry mechanism to handle race condition where delivery proof arrives
-                // before database transaction completes
-                val maxRetries = 3
-                val retryDelays = listOf(50L, 100L, 200L) // ms
 
-                var message =
-                    conversationRepository.applyDeliveryStatus(
-                        update.messageHash,
-                        update.status.wireValue,
-                        originatingIdentityHash,
-                    )
-                var attempt = 0
-
-                while (message == null && attempt < maxRetries) {
-                    Log.d(
-                        TAG,
-                        "Message ${update.messageHash.take(
-                            16,
-                        )}... not found, retrying in ${retryDelays[attempt]}ms (attempt ${attempt + 1}/$maxRetries)",
-                    )
-                    kotlinx.coroutines.delay(retryDelays[attempt])
-                    message =
-                        conversationRepository.applyDeliveryStatus(
-                            update.messageHash,
-                            update.status.wireValue,
-                            originatingIdentityHash,
-                        )
-                    attempt++
-                }
-
-                if (message != null) {
-                    // Record peer activity when delivery proof is received
-                    // This proves the peer was recently online and received our message
-                    if (update.status == DeliveryStatus.DELIVERED) {
-                        conversationLinkManager.recordPeerActivity(message.conversationHash, update.timestamp)
-                    }
-
-                    // Enrich sentInterface on a terminal-success state — the
-                    // routing table still reflects the actual send path. For
-                    // DIRECT/OPPORTUNISTIC this fires on "delivered"; for
-                    // PROPAGATED on "propagated" (the propagation-node-accepted
-                    // analogue). Failed / retrying paths carry too much routing
-                    // ambiguity to produce accurate interface data.
-                    if (update.status == DeliveryStatus.DELIVERED || update.status == DeliveryStatus.PROPAGATED) {
-                        enrichSentInterfaceOnDelivery(message)
-                    }
-
-                    // LCS: a message that was accepted for sending and then didn't
-                    // get there is the stale-path case — ask for a fresh route.
-                    //
-                    // RETRYING_PROPAGATED has to be in here, and is in fact the more
-                    // important of the two. When a propagation node is configured and
-                    // try_propagation_on_fail is set — the default — a failed direct
-                    // delivery does NOT report FAILED. event_bridge.py schedules the
-                    // propagation fallback instead and emits RETRYING_PROPAGATED, and
-                    // FAILED only arrives if that fallback also fails. So for most
-                    // users the direct route going stale would never reach this hook
-                    // on FAILED alone. RETRYING_PROPAGATED fires precisely *because*
-                    // direct delivery failed, which is the signal we want; the
-                    // cooldown in forcePathRequest collapses it with the FAILED that
-                    // may follow.
-                    val directRouteFailed =
-                        when (update.status) {
-                            // Always a direct-delivery failure: the propagation
-                            // fallback runs only *because* the direct attempt failed.
-                            //
-                            // Note this branch must NOT be gated on deliveryMethod.
-                            // The reducer in MessageDao rewrites deliveryMethod to
-                            // "propagated" as part of this very update, so the row
-                            // returned here always reads "propagated" — testing it
-                            // would suppress the exact case this feature exists for.
-                            DeliveryStatus.RETRYING_PROPAGATED -> true
-
-                            // Terminal failure on a non-propagated row: the direct
-                            // route is the one that failed, so ask about the peer.
-                            // A propagated row is handled below instead — there it
-                            // is the node that failed, not the peer.
-                            DeliveryStatus.FAILED -> message.deliveryMethod != "propagated"
-
-                            else -> false
-                        }
-
-                    // The last leg: a propagated message that failed means the
-                    // propagation node was unreachable. Asking for a path to the peer
-                    // would be pointless — the peer was never the next hop — so ask
-                    // about the node itself. Covers both the user addressing a message
-                    // to the node directly and the automatic fallback failing after
-                    // the direct attempt already failed.
-                    val propagationRouteFailed =
-                        update.status == DeliveryStatus.FAILED &&
-                            message.deliveryMethod == "propagated"
-
-                    if (directRouteFailed) {
-                        requestPathAfterDeliveryFailure(message.conversationHash)
-                    }
-                    if (propagationRouteFailed) {
-                        requestPathToPropagationNode()
-                    }
-
-                    Log.d(TAG, "Updated message ${update.messageHash.take(16)}... status to ${update.status.wireValue}")
-                } else {
-                    Log.w(TAG, "Delivery status update for unknown message after $maxRetries retries: ${update.messageHash.take(16)}...")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error updating message status", e)
-            }
-        }
-
-        /**
-         * Enrich sentInterface on a terminal-success status if it wasn't
-         * captured at send time. For PROPAGATED messages the recipient hash
-         * has no direct next-hop — the message physically went over the
-         * interface reaching the propagation node — so we query the
-         * configured outbound propagation node hash instead. Other delivery
-         * methods query the recipient (conversationHash) as usual.
-         */
-        private suspend fun enrichSentInterfaceOnDelivery(
-            message: network.libertychat.app.data.db.entity.MessageEntity,
-        ) {
-            if (!message.isFromMe || message.sentInterface != null) return
-            try {
-                val lookupHash =
-                    if (message.deliveryMethod == "propagated") {
-                        runCatching { rnsLxmf.getOutboundPropagationNode().getOrNull() }
-                            .getOrNull()
-                            ?.chunked(2)
-                            ?.map { it.toInt(16).toByte() }
-                            ?.toByteArray()
-                            ?: return // no propagation node configured → nothing useful to query
-                    } else {
-                        message.conversationHash
-                            .chunked(2)
-                            .map { it.toInt(16).toByte() }
-                            .toByteArray()
-                    }
-                val sentInterface = rnsCore.getNextHopInterfaceName(lookupHash)
-                if (sentInterface != null) {
-                    conversationRepository.updateMessageSentInterface(
-                        message.id,
-                        sentInterface,
-                        message.identityHash,
-                    )
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to enrich sent interface on delivery: ${e.message}")
-            }
-        }
 
         /**
          * Handle an incoming reaction from another user.
@@ -1676,76 +1510,7 @@ class MessagingViewModel
             return composerCanClear
         }
 
-        /**
-         * LCS: ask the network for a fresh route after a message we had already
-         * handed to the backend came back failed.
-         *
-         * This is the hook that earns its keep, and the reason it is here rather
-         * than on the synchronous send failure. A send that fails *synchronously*
-         * does so only when the backend couldn't resolve the recipient's identity at
-         * all, and by then it has already called `request_path` itself and polled
-         * for ten seconds (`PythonRnsLxmf.resolveRecipientDestination`,
-         * `NativeMessageSender.resolveRecipientIdentity`) — asking a second time
-         * would just put another broadcast on the air for nothing.
-         *
-         * The case with no path request anywhere is this one. Once a peer has been
-         * resolved its destination is cached, so a peer that was reachable an hour
-         * ago and isn't now skips that resolution entirely, goes straight to
-         * `handle_outbound` over a path that no longer leads anywhere, and surfaces
-         * as a delivery failure later. Nothing in that sequence ever asks for a new
-         * route, and RNS won't drop the stale entry until it expires.
-         *
-         * Nothing re-sends automatically: a route takes time to come back and a
-         * retry racing the announce would fail again. The message is already marked
-         * failed, so Retry is there once the path returns. Rate-limiting lives in
-         * [IdentityResolutionManager.forcePathRequest] — a conversation failing
-         * repeatedly costs one request per minute, not one per message.
-         */
-        private fun requestPathAfterDeliveryFailure(destinationHash: String) {
-            if (destinationHash.isBlank()) return
-            viewModelScope.launch(pathRequestDispatcher) {
-                runCatching {
-                    identityResolutionManager.forcePathRequest(destinationHash)
-                }.onFailure { e ->
-                    Log.e(TAG, "Path request after delivery failure threw", e)
-                }
-            }
-        }
 
-        /**
-         * LCS: ask the network for a route to the configured outbound propagation
-         * node, after a propagated message failed to reach it.
-         *
-         * The last rung of the delivery ladder. A direct send that fails gets a path
-         * request for the peer and a propagation retry; if that retry also fails, the
-         * node is what's unreachable, and until now nothing asked about it — the peer
-         * had a path request it didn't need and the node had none at all.
-         *
-         * Keyed on the node's own hash, so the per-destination cooldown in
-         * [IdentityResolutionManager.forcePathRequest] rate-limits node requests
-         * separately from peer requests rather than one starving the other.
-         */
-        private fun requestPathToPropagationNode() {
-            viewModelScope.launch(pathRequestDispatcher) {
-                val nodeHash =
-                    runCatching { rnsLxmf.getOutboundPropagationNode().getOrNull() }
-                        .getOrNull()
-                        ?.takeIf { it.isNotBlank() }
-
-                if (nodeHash == null) {
-                    // Nothing configured, so the propagated send can't have been
-                    // aimed anywhere — nothing useful to ask about.
-                    Log.d(TAG, "Propagated delivery failed with no propagation node configured")
-                    return@launch
-                }
-
-                runCatching {
-                    identityResolutionManager.forcePathRequest(nodeHash)
-                }.onFailure { e ->
-                    Log.e(TAG, "Path request for propagation node threw", e)
-                }
-            }
-        }
 
         private suspend fun clearSubmittedDraft(
             destinationHash: String,
