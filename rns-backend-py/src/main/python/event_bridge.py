@@ -35,6 +35,7 @@ import json
 import queue
 import signal
 import threading
+import time
 
 import LXMF
 import RNS
@@ -747,6 +748,198 @@ threading.Thread(
 ).start()
 
 
+# ----------------------------------------------------------------------------
+# LCS: path rediscovery between a failed direct send and the propagation
+# fallback.
+#
+# A direct send that fails on a stale route used to go straight to the
+# propagation node, leaving the message on a third party's server when the peer
+# was perfectly reachable by a route nobody had asked for. Direct delivery is
+# better when it is available, so the route is rediscovered first and propagation
+# stays the fallback it is meant to be.
+#
+# Why this lives here rather than on the Kotlin side: the retry re-sends *the
+# same* `LXMessage` object, exactly as the propagation fallback does. Rebuilding
+# it from the database row would mint a new message hash, leave the original
+# stranded as failed beside a duplicate, and lose the `try_propagation_on_fail`
+# arming. The object only exists in this process.
+#
+# Requests are collected per destination. One unreachable peer fails every
+# message queued for it, one callback each; without batching the first would
+# start a 15-second request while the rest hit the throttle and propagated
+# immediately, and then the request would succeed and re-send messages already
+# on their way to a propagation node. Collected and resolved together, the
+# network is asked once and nothing is sent twice.
+# ----------------------------------------------------------------------------
+
+#: How long to wait for a route to come back before falling through.
+PATH_RETRY_TIMEOUT_SECONDS = 15.0
+#: Minimum gap between requests for one peer. A retry can fail and call straight
+#: back in, so this is what stops a tight loop on the air.
+PATH_RETRY_MIN_INTERVAL_SECONDS = 60.0
+#: Requests per peer before giving up and letting propagation carry it.
+PATH_RETRY_MAX_ATTEMPTS = 3
+#: Quiet period after which a peer's budget resets.
+PATH_RETRY_BUDGET_RESET_SECONDS = 30 * 60
+#: Messages that may wait on one destination's request. Beyond this they
+#: propagate immediately rather than being dropped.
+PATH_RETRY_MAX_PENDING = 32
+
+_path_retry_lock = threading.RLock()
+_path_retry_pending = {}
+_path_retry_inflight = set()
+_path_retry_attempts = {}
+
+
+def next_path_retry_attempt(state, now):
+    """
+    LCS: throttle decision for one destination. Pure, so it is testable without
+    RNS, LXMF or a running Reticulum instance.
+
+    Returns `(allowed, new_state)`. `new_state` is the state to store when
+    allowed, and the unchanged state when not.
+    """
+    if state is None:
+        return True, {"count": 1, "last": now}
+    if now - state["last"] >= PATH_RETRY_BUDGET_RESET_SECONDS:
+        return True, {"count": 1, "last": now}
+    if now - state["last"] < PATH_RETRY_MIN_INTERVAL_SECONDS:
+        return False, state
+    if state["count"] >= PATH_RETRY_MAX_ATTEMPTS:
+        return False, state
+    return True, {"count": state["count"] + 1, "last": now}
+
+
+def clear_path_retry_budget(destination_hash):
+    """
+    LCS: a direct delivery, or a real announce from this peer, proves the route
+    works — so the budget should not still be spent from an earlier bad patch.
+
+    Called from `_delivered` for a direct (non-propagated) delivery, and from
+    `_AnnounceHandler.received_announce` for an announce that is not a path
+    response. See that call site for why a path response deliberately does not
+    count as proof.
+    """
+    with _path_retry_lock:
+        _path_retry_attempts.pop(destination_hash, None)
+
+
+def queue_failed_message_for_path_retry(destination_hash, on_path, on_no_path, label="recipient"):
+    """
+    LCS: wait on a route for this destination before deciding how to deliver.
+
+    `destination_hash` is whatever the network should be asked about — the
+    recipient for a failed direct send, the propagation node for a failed
+    propagated one. Every map here is keyed on it, so the two carry separate
+    attempt counters and cooldowns and neither can spend the other's budget.
+    `label` only names the destination's role in the logs.
+
+    Returns True when the message is queued and a resolution will follow, and
+    False when the caller must act *now* — the queue is full, or the throttle has
+    spent its budget. A refusal must never mean silence: the caller propagates
+    immediately instead of leaving the message waiting for something that is not
+    going to happen.
+    """
+    start_worker = False
+    with _path_retry_lock:
+        pending = _path_retry_pending.setdefault(destination_hash, [])
+        if len(pending) >= PATH_RETRY_MAX_PENDING:
+            RNS.log(
+                f"event_bridge: path retry queue full for {_hex(destination_hash)}, "
+                f"falling through",
+                RNS.LOG_DEBUG,
+            )
+            return False
+
+        if destination_hash not in _path_retry_inflight:
+            allowed, state = next_path_retry_attempt(
+                _path_retry_attempts.get(destination_hash), time.time(),
+            )
+            if not allowed:
+                RNS.log(
+                    f"event_bridge: path retry throttled for {_hex(destination_hash)}, "
+                    f"falling through",
+                    RNS.LOG_DEBUG,
+                )
+                return False
+            _path_retry_attempts[destination_hash] = state
+            _path_retry_inflight.add(destination_hash)
+            start_worker = True
+
+        pending.append((on_path, on_no_path))
+
+    if start_worker:
+        threading.Thread(
+            target=_path_retry_worker,
+            args=(destination_hash, label),
+            name="columba-path-retry",
+            daemon=True,
+        ).start()
+    return True
+
+
+def _path_retry_worker(destination_hash, label="recipient"):
+    """
+    LCS: expire the stale entry, ask for a route, and wait to see if one lands.
+
+    Its own thread rather than the fallback queue, which is served by a single
+    worker — a fifteen-second wait there would stall every other message's
+    fallback behind this one.
+    """
+    path_found = False
+    try:
+        # The expiry is what makes the request able to help at all: a path
+        # request is answered from a *cached* announce carrying its original
+        # emission timestamp, which RNS refuses to accept over an entry it has
+        # already seen unless the entry expired. See PythonRnsCore.requestPath.
+        RNS.Transport.expire_path(destination_hash)
+        RNS.Transport.request_path(destination_hash)
+        RNS.log(
+            f"event_bridge: requesting path to {label} {_hex(destination_hash)} "
+            f"after a send failure",
+            RNS.LOG_DEBUG,
+        )
+
+        deadline = time.time() + PATH_RETRY_TIMEOUT_SECONDS
+        while time.time() < deadline:
+            if RNS.Transport.has_path(destination_hash):
+                path_found = True
+                break
+            time.sleep(0.25)
+
+        if path_found:
+            # Let the refreshed entry settle before anything sends over it.
+            time.sleep(0.5)
+            RNS.log(
+                f"event_bridge: path to {label} {_hex(destination_hash)} found, retrying",
+                RNS.LOG_DEBUG,
+            )
+        else:
+            RNS.log(
+                f"event_bridge: no path to {label} {_hex(destination_hash)} "
+                f"before the request timed out",
+                RNS.LOG_DEBUG,
+            )
+    except Exception as e:  # noqa: BLE001 — never strand the queue on an error
+        RNS.log(f"event_bridge: path retry worker failed: {e}", RNS.LOG_ERROR)
+    finally:
+        _resolve_path_retry(destination_hash, path_found)
+
+
+def _resolve_path_retry(destination_hash, path_found):
+    """LCS: act on everything queued for this destination, exactly once each."""
+    with _path_retry_lock:
+        pending = _path_retry_pending.pop(destination_hash, [])
+        _path_retry_inflight.discard(destination_hash)
+
+    for on_path, on_no_path in pending:
+        handler = on_path if path_found else on_no_path
+        try:
+            handler()
+        except Exception as e:  # noqa: BLE001 — one bad message must not strand the rest
+            RNS.log(f"event_bridge: could not resolve a queued message: {e}", RNS.LOG_ERROR)
+
+
 def _enqueue_fallback(task):
     try:
         _fallback_queue.put_nowait(task)
@@ -920,6 +1113,29 @@ class _AnnounceHandler:
         # "unknown" aspect, and collide into the "Site" filter.
         if enrichment.get("aspect") is None:
             return
+
+        # LCS: a real announce from this peer is proof the route works, so the
+        # rediscovery budget must not stay spent from an earlier bad patch.
+        # Without this, the budget in `_path_retry_attempts` (3 attempts, then a
+        # 30-minute reset) outlives the outage that spent it: the user announces
+        # from the other side to unstick a conversation, the route becomes good,
+        # and the very next direct failure skips rediscovery and goes straight to
+        # propagation — exactly the behaviour the ladder exists to prevent, in
+        # exactly the window where it should work.
+        #
+        # Deliberately NOT cleared for a path response. A path response is a
+        # *cached* announce replayed by whoever holds the route, so it proves only
+        # that someone remembers a path, not that the path carries traffic — the
+        # whole reason `request_path` had to start expiring first. Clearing on one
+        # would uncap the ladder for the one case the cap is for: a peer whose
+        # table entry keeps getting repopulated while delivery keeps failing. That
+        # would leave an unreachable peer costing a path request every minute,
+        # forever, which on a LoRa link is real airtime.
+        if not is_path_response:
+            try:
+                clear_path_retry_budget(destination_hash)
+            except Exception:  # noqa: BLE001 — bookkeeping only, never fatal
+                pass
         # Receiving interface annotation. RNS doesn't surface a per-announce
         # `received_on` interface on `received_announce(...)` — we have to
         # look it up from `Transport.path_table[destination_hash][5]` (the
@@ -1618,6 +1834,13 @@ def attach_lxmessage_callbacks(
     attempt_lock = threading.RLock()
     attempt_state = {"value": "primary"}
 
+    def _propagation_node_hash():
+        """LCS: the configured outbound propagation node, or None."""
+        router = _lxmf_router
+        if router is None:
+            return None
+        return getattr(router, "outbound_propagation_node", None)
+
     def _attempt_payload(msg, **values):
         return {
             "hash": _hex(getattr(msg, "hash", None)),
@@ -1647,6 +1870,21 @@ def attach_lxmessage_callbacks(
             ):
                 return
             attempt_state["value"] = "propagated" if is_propagated else "delivered"
+            # LCS: whichever hop just proved itself gets its rediscovery budget
+            # back. A direct delivery proves the recipient's route. A propagated
+            # message reaching SENT proves the *node's* — SENT on a propagated
+            # message means the node accepted it, and the node is a Reticulum
+            # destination with its own route that can go stale exactly like a
+            # peer's. Keyed separately, so neither clears the other.
+            try:
+                if is_propagated:
+                    node_hash = _propagation_node_hash()
+                    if node_hash is not None:
+                        clear_path_retry_budget(node_hash)
+                else:
+                    clear_path_retry_budget(msg.get_destination().hash)
+            except Exception:  # noqa: BLE001 — bookkeeping only
+                pass
             RNS.log(
                 f"event_bridge: _delivered fired for {msg_hash_hex} "
                 f"(state={state}, method={method}, desired={desired})",
@@ -1661,25 +1899,149 @@ def attach_lxmessage_callbacks(
                 _emit(on_failed, _attempt_payload(msg))
 
     def _failed(msg):
+        """
+        LCS: the delivery ladder — direct, rediscover the route, direct again,
+        propagation, failure.
+
+        Rediscovery sits ahead of the propagation fallback deliberately. A direct
+        send that failed on a stale route used to go straight to a propagation
+        node, leaving the message on a third party's server when the peer was
+        reachable all along by a route nobody had asked for. Direct delivery is
+        better when it is available, so propagation stays the fallback it is
+        meant to be.
+
+        The retry re-sends *the same* `LXMessage`, which is why this is here and
+        not on the Kotlin side: rebuilding it from the database row would mint a
+        new hash, strand the original as failed beside a duplicate, and lose the
+        `try_propagation_on_fail` arming. `desired_method` is deliberately left
+        untouched by the direct retry, so if that retry fails too this runs again
+        and propagation still happens.
+
+        An already-propagated message is excluded: it failed because the
+        propagation *node* was unreachable, not the recipient, and LXMF requests
+        and retries the node's own path itself (`LXMRouter.py:2909`). Asking here
+        would aim at the wrong destination.
+        """
         captured_router = _lxmf_router
-        with attempt_lock:
-            state = attempt_state["value"]
-            if state in ("delivered", "failed", "scheduled", "admitted"):
+        propagation_available = (
+            getattr(msg, "try_propagation_on_fail", False)
+            and captured_router is not None
+            and getattr(captured_router, "outbound_propagation_node", None) is not None
+            and getattr(msg, "desired_method", None) != LXMF.LXMessage.PROPAGATED
+        )
+
+        def _give_up():
+            with attempt_lock:
+                if attempt_state["value"] not in ("delivered", "failed"):
+                    attempt_state["value"] = "failed"
+                    _emit(on_failed, _attempt_payload(msg))
+
+        def _submit_direct_retry():
+            with attempt_lock:
+                if attempt_state["value"] != "rediscovering" or _lxmf_router is not captured_router:
+                    return
+                # Same object, re-sent — not a copy. Only the send state is
+                # reset, the way the propagation fallback below does it.
+                # desired_method is left alone on purpose: propagation stays
+                # armed for the next failure.
+                msg.delivery_attempts = 0
+                msg.packed = None
+                attempt_state["value"] = "admitted"
+
+            try:
+                captured_router.handle_outbound(msg)
+            except Exception as e:  # noqa: BLE001
+                RNS.log(f"event_bridge: direct retry failed: {e}", RNS.LOG_ERROR)
+                _give_up()
+            else:
+                with attempt_lock:
+                    if attempt_state["value"] == "admitted":
+                        attempt_state["value"] = "submitted"
+                RNS.log(
+                    "event_bridge: route rediscovered, retrying direct delivery",
+                    RNS.LOG_DEBUG,
+                )
+
+        def _resubmit_propagated():
+            """LCS rung 3: the node's route came back, so send it there again."""
+            with attempt_lock:
+                if attempt_state["value"] != "node_rediscovering" or _lxmf_router is not captured_router:
+                    return
+                msg.delivery_attempts = 0
+                msg.packed = None
+                msg.propagation_packed = None
+                msg.propagation_stamp = None
+                msg.defer_propagation_stamp = True
+                msg.desired_method = LXMF.LXMessage.PROPAGATED
+                msg.try_propagation_on_fail = False
+                # Terminal from here: a second propagated failure after the
+                # node's route was rebuilt is a real failure, not another rung.
+                msg.register_failed_callback(_fallback_failed)
+                attempt_state["value"] = "admitted"
+                _emit(on_retrying_propagated, _attempt_payload(msg))
+
+            try:
+                captured_router.handle_outbound(msg)
+            except Exception as e:  # noqa: BLE001
+                RNS.log(
+                    f"event_bridge: propagated resubmit after node rediscovery failed: {e}",
+                    RNS.LOG_ERROR,
+                )
+                with attempt_lock:
+                    _fallback_failed(msg)
+            else:
+                with attempt_lock:
+                    if attempt_state["value"] == "admitted":
+                        attempt_state["value"] = "submitted"
+                RNS.log(
+                    "event_bridge: node route rediscovered, retrying via propagation node",
+                    RNS.LOG_DEBUG,
+                )
+
+        def _node_rediscover_or_give_up(_failed_msg=None):
+            """
+            LCS rung 3: a propagated send failed — rediscover the *node's* route.
+
+            Everything else in the ladder falls back to the propagation node, so
+            the node was the one destination in it with no recovery at all: a
+            failed propagated message simply stopped, and nothing asked where the
+            node had gone.
+
+            LXMF does not cover this. Its propagated branch asks for a path only
+            when it has *none* (`LXMRouter.py:2909`); against a stale entry it
+            goes straight to `RNS.Link`, the link fails, and it retries the same
+            dead route until the attempts run out, never asking. The
+            drop-and-rediscover that rescues opportunistic delivery is not in
+            that branch either.
+
+            Keyed on the node's own hash, so the node and the recipient hold
+            separate attempt counters and cooldowns and neither starves the
+            other. Once per message, and the resubmit registers a terminal
+            callback, so this cannot loop.
+            """
+            node_hash = _propagation_node_hash()
+            try_node_rediscover = False
+            with attempt_lock:
+                if attempt_state["value"] in ("delivered", "failed", "node_rediscovering"):
+                    return
+                if (
+                    node_hash is not None
+                    and not getattr(msg, "_columba_node_retry_attempted", False)
+                ):
+                    msg._columba_node_retry_attempted = True
+                    attempt_state["value"] = "node_rediscovering"
+                    try_node_rediscover = True
+
+            if not try_node_rediscover:
+                _fallback_failed(msg)
                 return
-            if state in ("submitted", "propagated"):
-                attempt_state["value"] = "failed"
-                _emit(on_failed, _attempt_payload(msg))
-                return
-            if not (
-                getattr(msg, "try_propagation_on_fail", False)
-                and captured_router is not None
-                and getattr(captured_router, "outbound_propagation_node", None) is not None
-                and getattr(msg, "desired_method", None) != LXMF.LXMessage.PROPAGATED
-            ):
-                attempt_state["value"] = "failed"
-                _emit(on_failed, _attempt_payload(msg))
-                return
-            attempt_state["value"] = "scheduled"
+
+            queued = queue_failed_message_for_path_retry(
+                node_hash, _resubmit_propagated, _give_up, label="propagation node",
+            )
+            if not queued:
+                # A refusal must not mean silence here either.
+                _give_up()
 
         def _submit_propagated():
             with attempt_lock:
@@ -1693,7 +2055,9 @@ def attach_lxmessage_callbacks(
                 msg.propagation_stamp = None
                 msg.defer_propagation_stamp = True
                 msg.desired_method = LXMF.LXMessage.PROPAGATED
-                msg.register_failed_callback(_fallback_failed)
+                # Rung 3, not plain failure: if the node is what went away, its
+                # route gets rebuilt and this message is re-sent there.
+                msg.register_failed_callback(_node_rediscover_or_give_up)
                 attempt_state["value"] = "admitted"
                 _emit(on_retrying_propagated, _attempt_payload(msg))
 
@@ -1715,11 +2079,63 @@ def attach_lxmessage_callbacks(
                     RNS.LOG_DEBUG,
                 )
 
-        if not _enqueue_fallback(_submit_propagated):
+        def _propagate_or_give_up():
+            if not propagation_available:
+                _give_up()
+                return
             with attempt_lock:
-                if attempt_state["value"] == "scheduled":
-                    attempt_state["value"] = "failed"
-                    _emit(on_failed, _attempt_payload(msg))
+                if attempt_state["value"] in ("delivered", "failed"):
+                    return
+                attempt_state["value"] = "scheduled"
+            if not _enqueue_fallback(_submit_propagated):
+                _give_up()
+
+        try_rediscover = False
+        with attempt_lock:
+            state = attempt_state["value"]
+            if state in (
+                "delivered", "failed", "scheduled", "admitted",
+                "rediscovering", "node_rediscovering",
+            ):
+                return
+            if state == "propagated":
+                # The propagation attempt itself failed. Nothing left to try.
+                attempt_state["value"] = "failed"
+                _emit(on_failed, _attempt_payload(msg))
+                return
+
+            already_propagated = (
+                getattr(msg, "desired_method", None) == LXMF.LXMessage.PROPAGATED
+            )
+            if not getattr(msg, "_columba_path_retry_attempted", False) and not already_propagated:
+                msg._columba_path_retry_attempted = True
+                attempt_state["value"] = "rediscovering"
+                try_rediscover = True
+
+        if try_rediscover:
+            destination_hash = None
+            try:
+                destination_hash = msg.get_destination().hash
+            except Exception as e:  # noqa: BLE001
+                RNS.log(f"event_bridge: could not read destination for retry: {e}", RNS.LOG_ERROR)
+
+            queued = False
+            if destination_hash is not None:
+                queued = queue_failed_message_for_path_retry(
+                    destination_hash, _submit_direct_retry, _propagate_or_give_up,
+                )
+
+            if not queued:
+                # Throttled, queue full, or no destination to ask about. A
+                # refusal must not mean silence — propagate now rather than
+                # leaving the message waiting for something that is not coming.
+                with attempt_lock:
+                    if attempt_state["value"] == "rediscovering":
+                        attempt_state["value"] = state
+                _propagate_or_give_up()
+            return
+
+        _propagate_or_give_up()
 
     # Tag the LXMessage so the failed callback can see the intent. Upstream
     # Sideband uses this same attribute; LXMF does not read it itself, so the

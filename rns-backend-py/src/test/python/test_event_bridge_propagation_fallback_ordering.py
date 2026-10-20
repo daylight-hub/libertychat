@@ -1,6 +1,7 @@
 import importlib.util
 import sys
 import threading
+import time
 import types
 import unittest
 from pathlib import Path
@@ -79,6 +80,14 @@ class PropagationFallbackOrderingTest(unittest.TestCase):
         setattr(rns, "LOG_ERROR", 3)
         setattr(rns, "LOG_DEBUG", 7)
         setattr(rns, "log", lambda *args, **kwargs: None)
+        # Rung 3 asks about the propagation node when a propagated send fails,
+        # so the worker needs a Transport. Nothing ever answers here: these
+        # tests are about the ladder's ordering, not about route recovery.
+        setattr(rns, "Transport", types.SimpleNamespace(
+            expire_path=lambda destination_hash: None,
+            request_path=lambda destination_hash: None,
+            has_path=lambda destination_hash: False,
+        ))
         sys.modules["RNS"] = rns
 
         lxmf = types.ModuleType("LXMF")
@@ -94,6 +103,26 @@ class PropagationFallbackOrderingTest(unittest.TestCase):
         assert spec is not None and spec.loader is not None
         cls.module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.module)
+
+    def setUp(self):
+        # Per-destination state is module level and the throttle is one request
+        # per minute, so without this the second test to ask about b"relay"
+        # would be refused and fail synchronously — the ordering under test
+        # would depend on which test ran first.
+        setattr(self.module, "_path_retry_pending", {})
+        setattr(self.module, "_path_retry_inflight", set())
+        setattr(self.module, "_path_retry_attempts", {})
+        setattr(self.module, "PATH_RETRY_TIMEOUT_SECONDS", 0.3)
+
+    def _wait_for(self, events, name, timeout=3.0):
+        """Wait for an asynchronously-emitted event, rather than assuming it is
+        already there. Rung 3 resolves on its own worker thread."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if any(event[0] == name for event in events):
+                return True
+            time.sleep(0.01)
+        return False
 
     def test_pinned_non_reentrant_router_lock_does_not_deadlock_or_reenter(self):
         events = []
@@ -189,11 +218,20 @@ class PropagationFallbackOrderingTest(unittest.TestCase):
         self.assertTrue(router.submitted.wait(timeout=1))
         self.assertTrue(callable(message.failed_callback))
         message.failed_callback(message)
+        # Rung 3 now sits between the propagated failure and giving up: the node
+        # is asked about on a worker thread, and nothing answers in this stub, so
+        # the terminal failure arrives shortly rather than inline.
+        self.assertTrue(
+            self._wait_for(events, "failed"),
+            "the propagated failure never became terminal after node rediscovery",
+        )
         message.state = 8
         self.assertTrue(callable(message.delivery_callback))
         message.delivery_callback(message)
 
         self.assertEqual(
+            # Only one "retrying": rung 3 emits a second one when the node's
+            # route comes back, and nothing answers here.
             ["retrying", "failed", "delivered"],
             [name for name, _ in events if name in ("retrying", "failed", "delivered")],
         )

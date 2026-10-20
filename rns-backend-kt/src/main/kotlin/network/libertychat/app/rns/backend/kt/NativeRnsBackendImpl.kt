@@ -1073,6 +1073,24 @@ class NativeRnsBackendImpl(
 
     override suspend fun hasPath(destinationHash: ByteArray): Boolean = Transport.hasPath(destinationHash)
 
+    /**
+     * LCS: does NOT expire the stale entry first, unlike the python backend.
+     *
+     * A path request is answered from the responder's *cached* announce, replayed
+     * with its original emission timestamp. RNS discards an announce whose hop
+     * count is >= the entry it already holds unless that entry expired or the
+     * announce was emitted later — and a replay satisfies neither. So requesting a
+     * path for a destination we already hold a stale entry for leaves the stale
+     * entry in place: `hasPath` keeps saying yes and every send keeps going down a
+     * dead route. `PythonRnsCore.requestPath` fixes that by calling
+     * `Transport.expire_path` first; reticulum-kt exposes no equivalent, so there
+     * is nothing to call here.
+     *
+     * LCS ships `pythonBackend`, where this is fixed, so this is a known gap in the
+     * `kotlinBackend` flavor rather than a shipping bug — the same shape as the
+     * missing path-table flush in [persistTransportData]. Worth closing if that
+     * flavor is ever released.
+     */
     override suspend fun requestPath(destinationHash: ByteArray): Result<Unit> =
         runCatching {
             Transport.requestPath(destinationHash)

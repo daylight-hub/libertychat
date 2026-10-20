@@ -11,6 +11,74 @@ upstream; upstream's own history is not repeated here.
 
 ## 2.3.1 — unreleased
 
+### Added
+
+- **A failed message is now queued, the route rediscovered, and the message
+  retried — before it falls back to a propagation node.** Previously a direct
+  send that failed on a stale route went straight to propagation, leaving the
+  message on a third party's server when the peer was reachable all along by a
+  route nobody had asked for.
+  The ladder is now: send direct → on failure expire the path and ask for a new
+  one → route found, retry direct → no route, hand it to the propagation node →
+  that fails too, report failure.
+  - The retry re-sends **the same `LXMessage`**, not a copy, so nothing is
+    duplicated, the row updates in place, and `desired_method` is deliberately
+    left untouched so `try_propagation_on_fail` stays armed: if the retry fails
+    too, propagation still happens. This is why it lives in `event_bridge.py`
+    rather than on the Kotlin side — rebuilding the message from its database row
+    would mint a new hash and strand the original as failed beside a duplicate.
+  - **Requests are batched per destination.** One unreachable peer fails every
+    message queued for it, one callback each; without batching the first would
+    start a 15-second request while the rest hit the throttle and propagated
+    immediately, and then the request would succeed and re-send messages already
+    on their way to a node. Collected and resolved together, the network is asked
+    once and nothing is sent twice.
+  - **Throttled**, because a retry can fail and call straight back in: one
+    request per peer per minute, three per peer, budget reset after 30 minutes of
+    quiet, and cleared outright by a successful delivery. A refusal never means
+    silence — a throttled or over-full queue propagates the message immediately
+    rather than leaving it waiting for something that is not coming.
+  - **An announce from the peer clears that budget too**, which matters more than
+    it sounds: announcing from the other side is what users do today to unstick a
+    conversation. Without this the budget outlives the outage that spent it, so
+    the announce fixes the route and the very next direct failure still skips
+    rediscovery and goes straight to propagation — the ladder bypassed in exactly
+    the window where it should work. A *path response* deliberately does not
+    count: it is a replayed cached announce, so it proves only that someone
+    remembers a route, not that the route carries traffic. Clearing on one would
+    uncap the ladder for the single case the cap exists for — a peer whose table
+    entry keeps being repopulated while delivery keeps failing — and leave an
+    unreachable peer costing a path request every minute indefinitely.
+  - **An already-propagated message is excluded.** It failed because the
+    propagation *node* was unreachable, not the recipient, and LXMF requests and
+    retries the node's own path itself (`LXMRouter.py:2909`). Asking here would
+    aim at the wrong destination.
+  - Runs on its own thread rather than the fallback queue, which has a single
+    worker — a fifteen-second wait there would stall every other message's
+    fallback behind it.
+  - **The propagation node gets the same treatment when it is the hop that
+    failed.** It was the one destination in the whole ladder with no recovery at
+    all: a failed propagated message simply stopped, and nothing asked where the
+    node had gone — while everything else falls back to it. LXMF does not cover
+    this. Its propagated branch asks for a path only when it has *none*
+    (`LXMRouter.py:2909`); against a stale entry it goes straight to `RNS.Link`,
+    the link fails, and it retries the same dead route until the attempts run
+    out, never asking. The drop-and-rediscover that rescues opportunistic
+    delivery is not in that branch either. So a failed propagated send now
+    expires the node's path, asks for a new one, and re-sends the message there
+    if a route comes back. Keyed on the node's own hash, so the node and the
+    recipient hold separate attempt counters and cooldowns and neither can
+    starve the other. Once per message, and the re-send registers a terminal
+    callback, so it cannot loop.
+  - **A propagated message reaching `SENT` clears the node's budget**, the same
+    way a direct delivery clears the recipient's. `SENT` on a propagated message
+    means the node accepted it, so the node is the hop that just proved
+    reachable.
+  - Covered by `test_event_bridge_path_rediscovery.py` (24 tests), including
+    assertions that rediscovery stays *ahead* of propagation. Reversing that
+    order is invisible in ordinary testing: the message still arrives, just via a
+    node that was never needed.
+
 ### Fixed
 
 - **A path request now expires the path it was asked about, so it can actually
@@ -33,6 +101,23 @@ upstream; upstream's own history is not repeated here.
   This is the same `expire_path` + `request_path` ordering
   `PythonRnsNomadnet.waitForRouteAppears` has always used for NomadNet links;
   messaging never adopted it.
+  The fix is in `PythonRnsCore.requestPath` itself rather than at its call sites,
+  so every caller inherits it — the automatic request after a failed send, the
+  propagation-node request, and the user's own "Request path" menu action, which
+  all funnel through `IdentityResolutionManager.forcePathRequest`. The
+  `kotlinBackend` flavor's `NativeRnsBackendImpl.requestPath` does *not*: it
+  wraps a bare `Transport.requestPath` and reticulum-kt exposes no `expire_path`
+  to call. That is now documented in place as a known gap in that unshipped
+  flavor, alongside its existing missing path-table flush.
+  One consequence worth recording: `DeliveryStatusCollector` still asks about
+  the propagation node when a `FAILED` status arrives, which on `pythonBackend`
+  is now a second ask a moment after the ladder's own. It only happens at the
+  very bottom of a total-failure chain — direct failed, rediscovery failed,
+  propagation failed, the node's own rediscovery failed — so it costs one extra
+  broadcast in a case where nothing worked anyway. Left in place for this
+  release rather than deleted blind; worth removing once the ladder is confirmed
+  on hardware, since on `kotlinBackend` that call cannot work either way (a bare
+  `request_path` against a stale entry is exactly the no-op this release fixes).
 - **The automatic path request after a failed send now actually fires.** It was
   wired to `MessagingViewModel`, which `hiltViewModel()` scopes to the chat
   screen's navigation entry — so it existed only while that conversation was

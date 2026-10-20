@@ -93,6 +93,14 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
   AutoInterface and Bluetooth LE only — nothing reaches the internet until the
   user adds a server or attaches an RNode. Upstream's Beleth RNS Hub seed is
   removed and deleted from existing installs on upgrade.
+- **A failed message is retried on a rediscovered route before it is propagated.**
+  The ladder is: send direct, and on failure expire the stale path and ask the
+  network for a new one; if a route comes back the same message is re-sent direct;
+  if none does, it goes to the propagation node; if that fails too it is reported
+  failed. Direct delivery beats leaving a message on a third party's server, so
+  propagation stays the fallback it is meant to be. Requests are batched per peer
+  so one unreachable contact asks the network once rather than once per queued
+  message, and throttled to three per peer at one a minute.
 - **Path request when a message fails to deliver.** A failed delivery asks the
   network for a path to that peer instead of leaving the message dead in the
   thread. The request is forced rather than skipped when a path is already

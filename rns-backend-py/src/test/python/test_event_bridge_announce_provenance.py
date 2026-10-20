@@ -76,6 +76,77 @@ class AnnounceProvenanceBridgeTests(unittest.TestCase):
         )
         self.assertTrue(callback.payloads[0]["is_path_response"])
 
+    def _seed_exhausted_budget(self, destination_hash):
+        """Spend this peer's rediscovery budget right up to the cap."""
+        now = 1_000.0
+        setattr(
+            self.module,
+            "_path_retry_attempts",
+            {destination_hash: {"count": self.module.PATH_RETRY_MAX_ATTEMPTS, "last": now}},
+        )
+        return now
+
+    def _would_retry(self, destination_hash, now):
+        """What the ladder would decide for this peer right now."""
+        state = self.module._path_retry_attempts.get(destination_hash)
+        allowed, _ = self.module.next_path_retry_attempt(state, now)
+        return allowed
+
+    def test_a_real_announce_restores_an_exhausted_rediscovery_budget(self):
+        setattr(self.module, "_on_announce", FakeCallback())
+        now = self._seed_exhausted_budget(b"destination")
+        self.assertFalse(
+            self._would_retry(b"destination", now),
+            "precondition: the budget should start exhausted",
+        )
+
+        self.module._AnnounceHandler().received_announce(
+            b"destination",
+            FakeIdentity(),
+            b"app-data",
+            b"packet-hash",
+            False,
+        )
+
+        self.assertTrue(
+            self._would_retry(b"destination", now),
+            "an announce proves the route, so rediscovery must be allowed again",
+        )
+
+    def test_a_path_response_leaves_the_budget_spent(self):
+        setattr(self.module, "_on_announce", FakeCallback())
+        now = self._seed_exhausted_budget(b"destination")
+
+        self.module._AnnounceHandler().received_announce(
+            b"destination",
+            FakeIdentity(),
+            b"app-data",
+            b"packet-hash",
+            True,
+        )
+
+        self.assertFalse(
+            self._would_retry(b"destination", now),
+            "a replayed cached announce is not proof the path carries traffic",
+        )
+
+    def test_an_announce_does_not_disturb_another_peers_budget(self):
+        setattr(self.module, "_on_announce", FakeCallback())
+        now = self._seed_exhausted_budget(b"other-peer")
+
+        self.module._AnnounceHandler().received_announce(
+            b"destination",
+            FakeIdentity(),
+            b"app-data",
+            b"packet-hash",
+            False,
+        )
+
+        self.assertFalse(
+            self._would_retry(b"other-peer", now),
+            "only the announcing peer's budget should be cleared",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
