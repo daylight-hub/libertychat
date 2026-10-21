@@ -89,7 +89,7 @@ data class SettingsState(
     val isLoading: Boolean = true,
     val showSaveSuccess: Boolean = false,
     val autoAnnounceEnabled: Boolean = true,
-    val autoAnnounceIntervalHours: Int = 3,
+    val autoAnnounceIntervalHours: Int = 1,
     val lastAutoAnnounceTime: Long? = null,
     val nextAutoAnnounceTime: Long? = null,
     val isManualAnnouncing: Boolean = false,

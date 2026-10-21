@@ -617,11 +617,21 @@ class SettingsRepository
 
         /**
          * Flow of the auto-announce interval in hours.
-         * Defaults to 3 hours if not set.
+         *
+         * LCS: defaults to 1 hour, down from 3. An announce is the only packet
+         * this app emits that transport nodes *rebroadcast* rather than consume,
+         * and a fresh emission timestamp is accepted over any existing path entry
+         * at every hop — so it is the only thing that reliably repairs a stale
+         * multi-hop route. A path request cannot: the first node holding an entry
+         * answers it from cache and stops it there. That makes this interval the
+         * worst case for how long a peer can be unreachable across a transport
+         * node, which is far too long a bet at three hours.
+         *
+         * Only affects installs that have never set it; a saved value is kept.
          */
         val autoAnnounceIntervalHoursFlow: Flow<Int> =
             context.dataStore.data
-                .map { preferences -> preferences[PreferencesKeys.AUTO_ANNOUNCE_INTERVAL_HOURS] ?: 3 }
+                .map { preferences -> preferences[PreferencesKeys.AUTO_ANNOUNCE_INTERVAL_HOURS] ?: 1 }
                 .distinctUntilChanged()
 
         /**

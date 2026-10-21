@@ -59,6 +59,17 @@ upstream; upstream's own history is not repeated here.
   Covered by `test_event_bridge_path_refresh.py` (16 tests), including a case
   that deletes the cached announce mid-wait to prove it comes back.
 
+### Changed
+
+- **The default auto-announce interval is 1 hour, down from 3.** An announce is
+  the only packet this app emits that transport nodes *rebroadcast* rather than
+  consume, and its fresh emission timestamp is accepted over any existing path
+  entry at every hop — so it is the only thing that reliably repairs a stale
+  multi-hop route. That makes this interval the worst case for how long a peer
+  can stay unreachable across a transport node, which is far too long a bet at
+  three hours. Only affects installs that have never set it; a saved value is
+  kept, so existing devices need changing in Settings.
+
 ### Removed
 
 - **The app-side path request to the propagation node.** The backend ladder took
