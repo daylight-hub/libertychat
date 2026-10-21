@@ -9,6 +9,58 @@ upstream; upstream's own history is not repeated here.
 
 ---
 
+## 2.3.2 — unreleased
+
+### Added
+
+- **A failed send now announces us, when rediscovery comes back empty.** This is
+  the only move left at that point, and it works for a reason that is not
+  obvious: a path request *cannot* cross a hop — the first transport node holding
+  any entry for the destination answers it from its own packet cache and stops it
+  there, which is why the radio stays silent — while an **announce is
+  rebroadcast** by every transport node that hears it, and carries a fresh
+  emission timestamp, so it is accepted over any existing entry at every hop.
+  It does not repair our route to the peer. It repairs *their* route to us, which
+  is better than it sounds: once they can reach us, their next message
+  establishes a link, and LXMF reuses an inbound link for outbound delivery
+  (`LXMRouter.backchannel_links`, consulted before any path lookup) — so their
+  reply carries our queued message out without our own path ever being fixed.
+  Floored at one announce per peer per ten minutes, separately from the
+  rediscovery budget, because this is broadcast on every interface and costs real
+  airtime on a slow one. Cleared when we hear an announce from that peer, since
+  there is no point announcing at someone we just heard from.
+
+### Fixed
+
+- **A path refresh that nothing answers no longer costs the route it was
+  refreshing.** The entry is snapshotted before being expired and put back if the
+  wait times out, so the honest `has_path == false` window that makes a replayed
+  announce acceptable does not turn into a permanent loss. An announce that
+  installs a better route while we wait still wins.
+- **...and no longer risks destroying the cached announce behind that route.**
+  `Transport.clean_announce_cache` deletes every cached announce the path table
+  does not reference and runs on the cache-clean interval, so expiring a path
+  makes its announce collectable. A cleaning pass landing in that window deleted
+  the file for good, and putting the entry back then left it pointing at nothing
+  — which is worse than either having the route or not having it, because
+  `path_request` sets `answered = True` *before* it checks the cache, so a node
+  in that state answers a path request with neither a reply nor a recursive
+  search. It also breaks the saved-path restore for that peer at the next start.
+  The announce bytes are now read before the expiry and written back with the
+  entry.
+- **A path restored from storage is marked unconfirmed.** A saved entry can be a
+  week old with nothing live having vouched for it, so the first failed send to
+  such a peer is far more likely to be the stale entry than a real outage. It now
+  gets a rediscovery attempt even on a spent budget — once per peer per restart.
+  Confirmed, and the flag cleared, by a delivery, an announce, or a refresh that
+  something answers.
+- Expire, request, poll, restore-on-silence and the announce now live in one
+  `refresh_path`, so the button and the automatic ladder cannot drift apart.
+  Covered by `test_event_bridge_path_refresh.py` (16 tests), including a case
+  that deletes the cached announce mid-wait to prove it comes back.
+
+---
+
 ## 2.3.1 — 2026-10-21
 
 ### Added

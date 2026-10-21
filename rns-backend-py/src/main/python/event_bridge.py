@@ -32,8 +32,10 @@ The Kotlin sub-impls attach them at the point they create those objects.
 """
 
 import json
+import os
 import queue
 import signal
+import sys
 import threading
 import time
 
@@ -583,6 +585,11 @@ def restore_path_table():
                     receiving_interface,
                     announce_packet.packet_hash,
                 ]
+                # LCS: a saved entry can be a week old and nothing live has
+                # vouched for it, so the first failed send to this peer gets a
+                # rediscovery attempt even on a spent budget. See
+                # queue_failed_message_for_path_retry.
+                mark_path_unconfirmed(destination_hash)
             restored += 1
         except Exception as e:  # noqa: BLE001 — one bad row must not lose the rest
             RNS.log(f"event_bridge: skipped a saved path entry: {e}", RNS.LOG_DEBUG)
@@ -785,6 +792,302 @@ PATH_RETRY_BUDGET_RESET_SECONDS = 30 * 60
 #: propagate immediately rather than being dropped.
 PATH_RETRY_MAX_PENDING = 32
 
+# LCS: how long to leave a refreshed entry to settle before sending over it.
+PATH_SETTLE_SECONDS = 0.5
+
+# LCS: minimum gap between self-announces provoked by a failed send, per peer.
+# An announce is the only packet this app can emit that a transport node
+# *rebroadcasts* rather than consuming, so it is the only way routing state
+# about us crosses a slow RF hop. It is also expensive on one, hence the floor.
+ANNOUNCE_ON_FAILURE_MIN_INTERVAL_SECONDS = 10 * 60
+
+_announce_on_failure_lock = threading.RLock()
+_announce_on_failure_at = {}
+
+# LCS: destinations whose path came from `restore_path_table` and has not been
+# confirmed by anything since. A saved entry can be a week old, so the first
+# failure to such a peer gets a rediscovery attempt even if the budget is spent.
+_unconfirmed_paths = set()
+_unconfirmed_paths_lock = threading.RLock()
+
+
+def mark_path_unconfirmed(destination_hash):
+    """LCS: record that this path was restored from storage, not learned live."""
+    with _unconfirmed_paths_lock:
+        _unconfirmed_paths.add(destination_hash)
+
+
+def confirm_path(destination_hash):
+    """LCS: something live has now vouched for this path."""
+    with _unconfirmed_paths_lock:
+        _unconfirmed_paths.discard(destination_hash)
+
+
+def is_path_unconfirmed(destination_hash):
+    with _unconfirmed_paths_lock:
+        return destination_hash in _unconfirmed_paths
+
+
+# LCS: in-memory path-table entry layout. Upstream keeps these as module-level
+# constants in `RNS/Transport.py`, but `RNS.Transport` resolves to the *class*
+# (RNS/__init__.py rebinds the attribute), so they are not reachable through it.
+# Read them from the module when it is importable and fall back to the documented
+# layout otherwise. Every use is length-checked, so a layout shift in a future
+# RNS skips the entry rather than corrupting it.
+_PT_IDX_FALLBACK = {"timestamp": 0, "packet": 6, "length": 7}
+
+
+def _path_table_indices():
+    module = sys.modules.get("RNS.Transport")
+    timestamp = getattr(module, "IDX_PT_TIMESTAMP", None) if module else None
+    packet = getattr(module, "IDX_PT_PACKET", None) if module else None
+    if isinstance(timestamp, int) and isinstance(packet, int):
+        return timestamp, packet, max(timestamp, packet) + 1
+    return (
+        _PT_IDX_FALLBACK["timestamp"],
+        _PT_IDX_FALLBACK["packet"],
+        _PT_IDX_FALLBACK["length"],
+    )
+
+
+def _announce_cache_path(packet_hash):
+    """LCS: where RNS keeps the cached announce for a path entry."""
+    return os.path.join(RNS.Reticulum.cachepath, "announces", _hex(packet_hash))
+
+
+def snapshot_path_entry(destination_hash):
+    """
+    LCS: capture a path entry *and the cached announce behind it* before expiry.
+
+    The announce matters as much as the entry. `Transport.clean_announce_cache`
+    deletes every cached announce the path table does not reference, and runs on
+    the cache-clean interval. Expiring a path makes its announce unreferenced, so
+    a cleaning pass landing in that window deletes the file for good — and then
+    putting the entry back leaves it pointing at nothing. That is a worse state
+    than either having the path or not having it: `path_request` sets
+    `answered = True` *before* it checks the cache (`Transport.py:3459` vs the
+    `packet == None` test just below), so a node in that state answers a path
+    request with neither a reply nor a recursive search. It also breaks
+    `restore_path_table` for that peer at the next start.
+
+    Returns None when there is nothing to snapshot.
+    """
+    try:
+        with RNS.Transport.path_table_lock:
+            entry = RNS.Transport.path_table.get(destination_hash)
+            if entry is None:
+                return None
+            entry_copy = list(entry)
+    except Exception as e:  # noqa: BLE001 — a snapshot is best-effort
+        RNS.log(f"event_bridge: could not snapshot path entry: {e}", RNS.LOG_DEBUG)
+        return None
+
+    _, idx_packet, min_length = _path_table_indices()
+    if len(entry_copy) < min_length:
+        RNS.log(
+            f"event_bridge: unrecognised path entry shape for "
+            f"{_hex(destination_hash)}, not snapshotting",
+            RNS.LOG_DEBUG,
+        )
+        return None
+
+    announce_bytes = None
+    try:
+        packet_hash = entry_copy[idx_packet]
+        cache_file = _announce_cache_path(packet_hash)
+        if os.path.isfile(cache_file):
+            with open(cache_file, "rb") as handle:
+                announce_bytes = handle.read()
+    except Exception as e:  # noqa: BLE001
+        RNS.log(f"event_bridge: could not read cached announce: {e}", RNS.LOG_DEBUG)
+
+    return {"hash": destination_hash, "entry": entry_copy, "announce": announce_bytes}
+
+
+def restore_path_entry(snapshot):
+    """
+    LCS: put a snapshotted entry back, for when a refresh found nothing.
+
+    A refresh that goes unanswered must not cost a route that was working. The
+    cached announce is rewritten first, because an entry whose announce has been
+    culled is worse than no entry at all (see `snapshot_path_entry`).
+
+    Deliberately declines to overwrite a live entry: if an announce installed a
+    better route while we were waiting, that wins.
+    """
+    if not snapshot:
+        return False
+    destination_hash = snapshot["hash"]
+    try:
+        idx_timestamp, idx_packet, _ = _path_table_indices()
+        announce_bytes = snapshot.get("announce")
+        if announce_bytes is not None:
+            cache_file = _announce_cache_path(snapshot["entry"][idx_packet])
+            if not os.path.isfile(cache_file):
+                os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                with open(cache_file, "wb") as handle:
+                    handle.write(announce_bytes)
+
+        with RNS.Transport.path_table_lock:
+            live = RNS.Transport.path_table.get(destination_hash)
+            if live is not None and live[idx_timestamp] != 0:
+                return False
+            RNS.Transport.path_table[destination_hash] = snapshot["entry"]
+        RNS.log(
+            f"event_bridge: nothing answered for {_hex(destination_hash)}, "
+            f"put the previous route back",
+            RNS.LOG_DEBUG,
+        )
+        return True
+    except Exception as e:  # noqa: BLE001
+        RNS.log(f"event_bridge: could not restore path entry: {e}", RNS.LOG_DEBUG)
+        return False
+
+
+def next_announce_on_failure(state, now):
+    """
+    LCS: pure decision — may we announce ourselves again for this peer yet?
+
+    Separate from the rediscovery budget on purpose: this is airtime spent on
+    *our* behalf, broadcast on every interface, so it gets its own much longer
+    floor and is not consumed by rediscovery attempts.
+    """
+    if state is None:
+        return True, now
+    if now - state >= ANNOUNCE_ON_FAILURE_MIN_INTERVAL_SECONDS:
+        return True, now
+    return False, state
+
+
+def announce_self_for_unreachable_peer(destination_hash):
+    """
+    LCS: announce our own delivery destination when a peer could not be reached.
+
+    This is the only move available once rediscovery has come back empty. A path
+    request cannot cross a hop — the first transport node holding any entry
+    answers it from cache and stops it — but an announce is *rebroadcast* by
+    every transport node that hears it, and carries a fresh emission timestamp,
+    so it is accepted over any existing entry at every hop.
+
+    That does not repair our route to the peer. It repairs *their* route to us,
+    which is better than it sounds: once they can reach us, their next message
+    establishes a link, and LXMF reuses an inbound link for outbound delivery
+    (`LXMRouter.backchannel_links`, consulted at `LXMRouter.py:2792` before any
+    path lookup). So a reply over that link carries our queued message out
+    without our own path ever being repaired.
+
+    Returns True if an announce was emitted.
+    """
+    router = _lxmf_router
+    if router is None:
+        return False
+
+    with _announce_on_failure_lock:
+        allowed, state = next_announce_on_failure(
+            _announce_on_failure_at.get(destination_hash), time.time(),
+        )
+        if not allowed:
+            RNS.log(
+                f"event_bridge: not announcing for {_hex(destination_hash)}, "
+                f"announced too recently",
+                RNS.LOG_DEBUG,
+            )
+            return False
+        _announce_on_failure_at[destination_hash] = state
+
+    try:
+        own_hashes = list(getattr(router, "delivery_destinations", {}).keys())
+    except Exception as e:  # noqa: BLE001
+        RNS.log(f"event_bridge: could not read delivery destinations: {e}", RNS.LOG_ERROR)
+        return False
+
+    if not own_hashes:
+        return False
+
+    emitted = False
+    for own_hash in own_hashes:
+        try:
+            router.announce(own_hash)
+            emitted = True
+            RNS.log(
+                f"event_bridge: announced {_hex(own_hash)} after failing to reach "
+                f"{_hex(destination_hash)}, so they can reach us and open a link",
+                RNS.LOG_DEBUG,
+            )
+        except Exception as e:  # noqa: BLE001
+            RNS.log(f"event_bridge: announce failed: {e}", RNS.LOG_ERROR)
+    return emitted
+
+
+def refresh_path(destination_hash, timeout=None, label="recipient", announce_if_empty=True):
+    """
+    LCS: expire a path, ask for a new one, and wait to see whether one lands.
+
+    The one place this sequence lives. Expiring first is what makes the request
+    able to help: a path request is answered from a *cached* announce carrying
+    its original emission timestamp, which RNS refuses to accept over an entry it
+    already holds unless that entry expired. Expiring also makes the answer
+    honest — with nothing in the table, `has_path` going true again can only mean
+    something replied.
+
+    If nothing replies, the previous entry and its cached announce go back, so a
+    refresh never costs a working route. If nothing replies and
+    `announce_if_empty` is set, we announce ourselves instead, which is the only
+    thing that puts routing state across a slow hop.
+
+    Returns True if a route answered.
+    """
+    if timeout is None:
+        timeout = PATH_RETRY_TIMEOUT_SECONDS
+
+    snapshot = snapshot_path_entry(destination_hash)
+    path_found = False
+    try:
+        RNS.Transport.expire_path(destination_hash)
+        RNS.Transport.request_path(destination_hash)
+        RNS.log(
+            f"event_bridge: requesting path to {label} {_hex(destination_hash)}",
+            RNS.LOG_DEBUG,
+        )
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if RNS.Transport.has_path(destination_hash):
+                path_found = True
+                break
+            time.sleep(0.25)
+    except Exception as e:  # noqa: BLE001
+        RNS.log(f"event_bridge: path refresh failed: {e}", RNS.LOG_ERROR)
+
+    if path_found:
+        confirm_path(destination_hash)
+        time.sleep(PATH_SETTLE_SECONDS)
+        RNS.log(
+            f"event_bridge: path to {label} {_hex(destination_hash)} refreshed",
+            RNS.LOG_DEBUG,
+        )
+    else:
+        RNS.log(
+            f"event_bridge: nothing answered for {label} {_hex(destination_hash)}",
+            RNS.LOG_DEBUG,
+        )
+        restore_path_entry(snapshot)
+        if announce_if_empty:
+            announce_self_for_unreachable_peer(destination_hash)
+
+    return path_found
+
+
+def refresh_path_async(destination_hash, label="recipient"):
+    """LCS: fire-and-forget [refresh_path], for callers that must not block."""
+    threading.Thread(
+        target=refresh_path,
+        args=(destination_hash,),
+        kwargs={"label": label},
+        name="columba-path-refresh",
+        daemon=True,
+    ).start()
+
 _path_retry_lock = threading.RLock()
 _path_retry_pending = {}
 _path_retry_inflight = set()
@@ -855,6 +1158,22 @@ def queue_failed_message_for_path_retry(destination_hash, on_path, on_no_path, l
             allowed, state = next_path_retry_attempt(
                 _path_retry_attempts.get(destination_hash), time.time(),
             )
+            if not allowed and is_path_unconfirmed(destination_hash):
+                # A path restored from storage can be a week old and has had
+                # nothing live vouch for it. The first failure to such a peer is
+                # the most likely to be the stale entry rather than a real
+                # outage, so it gets an attempt even on a spent budget. Cleared
+                # below, so this is once per peer per restart.
+                RNS.log(
+                    f"event_bridge: allowing a rediscovery for unconfirmed path "
+                    f"{_hex(destination_hash)} despite the budget",
+                    RNS.LOG_DEBUG,
+                )
+                confirm_path(destination_hash)
+                allowed = True
+                state = _path_retry_attempts.get(destination_hash) or {
+                    "count": 1, "last": time.time(),
+                }
             if not allowed:
                 RNS.log(
                     f"event_bridge: path retry throttled for {_hex(destination_hash)}, "
@@ -888,38 +1207,9 @@ def _path_retry_worker(destination_hash, label="recipient"):
     """
     path_found = False
     try:
-        # The expiry is what makes the request able to help at all: a path
-        # request is answered from a *cached* announce carrying its original
-        # emission timestamp, which RNS refuses to accept over an entry it has
-        # already seen unless the entry expired. See PythonRnsCore.requestPath.
-        RNS.Transport.expire_path(destination_hash)
-        RNS.Transport.request_path(destination_hash)
-        RNS.log(
-            f"event_bridge: requesting path to {label} {_hex(destination_hash)} "
-            f"after a send failure",
-            RNS.LOG_DEBUG,
-        )
-
-        deadline = time.time() + PATH_RETRY_TIMEOUT_SECONDS
-        while time.time() < deadline:
-            if RNS.Transport.has_path(destination_hash):
-                path_found = True
-                break
-            time.sleep(0.25)
-
-        if path_found:
-            # Let the refreshed entry settle before anything sends over it.
-            time.sleep(0.5)
-            RNS.log(
-                f"event_bridge: path to {label} {_hex(destination_hash)} found, retrying",
-                RNS.LOG_DEBUG,
-            )
-        else:
-            RNS.log(
-                f"event_bridge: no path to {label} {_hex(destination_hash)} "
-                f"before the request timed out",
-                RNS.LOG_DEBUG,
-            )
+        # All of expire / request / poll / restore-on-silence / announce lives in
+        # refresh_path, so the button and the ladder cannot drift apart.
+        path_found = refresh_path(destination_hash, label=label)
     except Exception as e:  # noqa: BLE001 — never strand the queue on an error
         RNS.log(f"event_bridge: path retry worker failed: {e}", RNS.LOG_ERROR)
     finally:
@@ -1134,6 +1424,9 @@ class _AnnounceHandler:
         if not is_path_response:
             try:
                 clear_path_retry_budget(destination_hash)
+                confirm_path(destination_hash)
+                with _announce_on_failure_lock:
+                    _announce_on_failure_at.pop(destination_hash, None)
             except Exception:  # noqa: BLE001 — bookkeeping only, never fatal
                 pass
         # Receiving interface annotation. RNS doesn't surface a per-announce
@@ -1882,7 +2175,9 @@ def attach_lxmessage_callbacks(
                     if node_hash is not None:
                         clear_path_retry_budget(node_hash)
                 else:
-                    clear_path_retry_budget(msg.get_destination().hash)
+                    peer_hash = msg.get_destination().hash
+                    clear_path_retry_budget(peer_hash)
+                    confirm_path(peer_hash)
             except Exception:  # noqa: BLE001 — bookkeeping only
                 pass
             RNS.log(
