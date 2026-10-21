@@ -498,8 +498,9 @@ class PythonRnsLxmf(
             }
             Log.i(
                 TAG,
-                "Identity for ${hex.take(16)} changed (${cachedHash.take(8)} -> " +
-                    "${currentHash.take(8)}); rebuilding its destination",
+                "Identity for ${hex.take(16)} changed " +
+                    "(${cachedHash?.take(8) ?: "none"} -> ${currentHash?.take(8) ?: "none"}); " +
+                    "rebuilding its destination",
             )
             runtime.destinations.remove(hex)
         }

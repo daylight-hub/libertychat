@@ -22,6 +22,7 @@ import network.libertychat.app.rns.api.model.LogLevel
 import network.libertychat.app.rns.api.model.ReticulumConfig
 import network.libertychat.app.rns.api.RnsCore
 import network.libertychat.app.rns.api.RnsLxmf
+import network.libertychat.app.service.DeliveryStatusCollector
 import network.libertychat.app.service.IdentityResolutionManager
 import network.libertychat.app.service.MessageCollector
 import network.libertychat.app.service.PropagationNodeManager
@@ -77,7 +78,7 @@ class ColumbaApplication : Application() {
     lateinit var messageCollector: MessageCollector
 
     @Inject
-    lateinit var deliveryStatusCollector: network.libertychat.app.service.DeliveryStatusCollector
+    lateinit var deliveryStatusCollector: DeliveryStatusCollector
 
     @Inject
     lateinit var conversationRepository: ConversationRepository

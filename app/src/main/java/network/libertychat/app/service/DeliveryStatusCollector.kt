@@ -1,6 +1,7 @@
 package network.libertychat.app.service
 
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -15,7 +16,6 @@ import network.libertychat.app.rns.api.RnsCore
 import network.libertychat.app.rns.api.RnsLxmf
 import network.libertychat.app.rns.api.model.DeliveryStatus
 import network.libertychat.app.rns.api.model.DeliveryStatusUpdate
-import androidx.annotation.VisibleForTesting
 import javax.inject.Inject
 import javax.inject.Singleton
 
