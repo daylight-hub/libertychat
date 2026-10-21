@@ -61,6 +61,29 @@ upstream; upstream's own history is not repeated here.
 
 ### Changed
 
+- **"Request path" and "Ping destination" are one action now, and it attempts a
+  link.** The separate path-request item could not do its job: a path request
+  does not cross a hop. The first transport node holding any entry for the
+  destination answers it out of its own packet cache and stops it there — that
+  branch of `Transport.path_request` precedes and excludes the recursive search —
+  so when an upstream node is the one with the stale entry, no amount of asking
+  reaches the far side and the radio never keys. The button could only ever
+  report what the nearest node believed.
+  A failed *link* does cross. When a transport node relays a `LINKREQUEST` whose
+  proof never arrives, `Transport.jobs()` marks its own path unresponsive and
+  asks for a new one on every interface except the one the request came in on —
+  which is how a path request finally gets transmitted over the far side's radio.
+  So Ping now refreshes the route, then builds the link **whether or not** a route
+  answered. The old code returned "No path available" without ever constructing
+  it, throwing away the one lever that reaches past the first hop.
+- **The probe no longer calls a believed route "Reachable".** Falling back to
+  path-table heuristics reported `success` with no round-trip time, so a peer
+  whose route was a cached announce replayed by a broken upstream node was
+  reported as fine moments before every message to them failed. That outcome is
+  now `path_only` and says what it is: a route is known, no link would form on
+  it, it is probably stale — and we announced ourselves so the far side can reach
+  back.
+
 - **The default auto-announce interval is 1 hour, down from 3.** An announce is
   the only packet this app emits that transport nodes *rebroadcast* rather than
   consume, and its fresh emission timestamp is accepted over any existing path

@@ -53,6 +53,14 @@ class PythonRnsCore(
         // Conversation-link + probe timing knobs (mirrors v0.10.x
         // `establish_link` / `probe_link_speed`).
 
+        /**
+         * Seconds the probe spends refreshing the route before it builds a link.
+         * Shorter than the ladder's own budget because someone is watching a
+         * spinner: the link attempt that follows is the part that provokes
+         * upstream rediscovery, and it should not be waited out of the way.
+         */
+        private const val PROBE_PATH_REFRESH_SECONDS = 8.0
+
         /** Max time we wait for a path to appear during a probe (ms). */
         const val PATH_WAIT_MS = 5_000L
 
@@ -729,11 +737,26 @@ class PythonRnsCore(
             }
         }
 
-        // No existing link — try to establish one inline. Mirrors
-        // reticulum_wrapper.establish_link from release/v0.10.x. Item 2 is
-        // fixing establishConversationLink in a sibling worktree; both
-        // methods need this same establish-link-with-callback machinery,
-        // so duplicating it here is acceptable until the dust settles.
+        // LCS: refresh the route before trying to build a link on it. No live
+        // link exists at this point, so whatever is in the path table is
+        // unproven — and if it is stale, a link built on it fails slowly for no
+        // reason. `refresh_path` expires the entry, asks, waits, and puts the
+        // old entry back (with its cached announce) if nothing answers, so this
+        // cannot cost a working route. When nothing answers it also announces
+        // us, which is the only packet that crosses a hop and lets the far side
+        // open a link back to us.
+        val routeAnswered = runCatching {
+            runtime.eventBridge
+                .callAttr("refresh_path", pyHash, PROBE_PATH_REFRESH_SECONDS)
+                ?.toJava(Boolean::class.javaObjectType) ?: false
+        }.getOrElse { e ->
+            Log.w(TAG, "probeLinkSpeed: path refresh failed", e)
+            false
+        }
+        Log.d(TAG, "probeLinkSpeed: route refresh answered=$routeAnswered")
+
+        // Try the link either way — see tryEstablishLink for why a link attempt
+        // with no known route is the useful move rather than the wasteful one.
         val establishedResult = tryEstablishLink(destinationHash, timeoutSeconds)
         val establishedLink = establishedResult.first
         val establishError = establishedResult.second
@@ -755,8 +778,15 @@ class PythonRnsCore(
                 "probeLinkSpeed[direct]: establishment failed but heuristics available " +
                     "(hops=$hops, nextHopBps=$nextHopBps)",
             )
+            // LCS: "path_only", not "success". A path-table entry is a belief,
+            // not a measurement — and when an upstream transport node is
+            // replaying a cached announce it is a belief we have just been told
+            // by the very node that is wrong. Reporting this as "Reachable" is
+            // what made the old probe agree that a peer was fine moments before
+            // every message to them failed. The hop count is still worth
+            // returning; calling it reachability is not.
             return LinkSpeedProbeResult(
-                status = "success",
+                status = "path_only",
                 establishmentRateBps = null,
                 expectedRateBps = null,
                 rttSeconds = null,
@@ -891,9 +921,32 @@ class PythonRnsCore(
                         ?.toJava(Boolean::class.javaObjectType) ?: false
                 }.getOrNull() ?: false
             }
-            if (!hasPath) {
-                return null to "No path available"
-            }
+        }
+
+        // LCS: deliberately *not* a bail-out when no route answered. This used to
+        // return "No path available" here without ever constructing the link, and
+        // that threw away the only lever that reaches past the first hop.
+        //
+        // A path request cannot cross a hop: the first transport node holding any
+        // entry for this destination answers it from its own packet cache and
+        // stops it there (`Transport.path_request`, the "path is known" branch,
+        // which precedes and excludes the recursive search). So when an upstream
+        // node is the one holding a stale entry, no amount of asking will reach
+        // the far side.
+        //
+        // A failed *link* does reach it. When a transport node relays a
+        // LINKREQUEST whose proof never comes back, `Transport.jobs()` marks its
+        // own path unresponsive and asks for a new one on every interface except
+        // the one the request arrived on — which is how a path request finally
+        // gets transmitted over the far side's radio. Attempting a link that is
+        // very likely to fail is therefore the useful thing to do, not the
+        // wasteful one.
+        if (!hasPath) {
+            Log.d(
+                TAG,
+                "tryEstablishLink: no route answered for ${recipientDestHash.toHex().take(16)}, " +
+                    "attempting the link anyway to provoke upstream rediscovery",
+            )
         }
 
         // Create RNS.Link and poll status until ACTIVE — same pattern as

@@ -68,7 +68,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AltRoute
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Call
@@ -586,13 +585,6 @@ fun MessagingScreen(
     // user feedback so the tap doesn't feel silently dropped.
     LaunchedEffect(Unit) {
         viewModel.locationSharingMessage.collect { message ->
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-        }
-    }
-
-    // LCS: result of the "Request path" overflow-menu action.
-    LaunchedEffect(viewModel) {
-        viewModel.pathRequestMessage.collect { message ->
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
     }
@@ -1353,10 +1345,13 @@ fun MessagingScreen(
                                     showTextSizeDialog = true
                                 },
                             )
-                            // LCS: reachability check for this peer, above Request
-                            // path because it is the diagnosis and Request path is the
-                            // remedy. Establishes or reuses an RNS link and reports its
-                            // round-trip time; nothing is delivered to the peer.
+                            // LCS: one action for reachability, replacing a separate
+                            // "Request path" item that could not work. A path request
+                            // does not cross a hop — the first transport node holding
+                            // an entry answers it from its own cache and stops it — so
+                            // this refreshes the route and then attempts a link either
+                            // way, which is what provokes that node into asking over
+                            // its own radio. Nothing is delivered to the peer.
                             DropdownMenuItem(
                                 leadingIcon = {
                                     Icon(
@@ -1368,22 +1363,6 @@ fun MessagingScreen(
                                 onClick = {
                                     showOverflowMenu = false
                                     viewModel.pingCurrentConversation()
-                                },
-                            )
-                            // LCS: on-demand route discovery for this peer. A path
-                            // belongs to the peer rather than to any one message, so it
-                            // lives here rather than on a per-message menu.
-                            DropdownMenuItem(
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.AltRoute,
-                                        contentDescription = null,
-                                    )
-                                },
-                                text = { Text("Request path") },
-                                onClick = {
-                                    showOverflowMenu = false
-                                    viewModel.requestPathForCurrentConversation()
                                 },
                             )
                             HorizontalDivider()

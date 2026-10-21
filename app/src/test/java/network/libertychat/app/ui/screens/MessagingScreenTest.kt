@@ -162,7 +162,6 @@ class MessagingScreenTest {
         // Location-sharing refusal message (master-gate OFF Toast)
         every { mockViewModel.locationSharingMessage } returns MutableSharedFlow()
         // LCS: "Request path" message-action result (Toast)
-        every { mockViewModel.pathRequestMessage } returns MutableSharedFlow()
         // LCS: "Ping destination" message-action result (Toast)
         every { mockViewModel.linkProbeMessage } returns MutableSharedFlow()
         // Recent photos mock (share pictures feature)

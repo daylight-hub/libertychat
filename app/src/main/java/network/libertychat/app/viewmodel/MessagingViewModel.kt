@@ -320,18 +320,14 @@ class MessagingViewModel
         private val _locationSharingMessage = MutableSharedFlow<String>(extraBufferCapacity = 4)
         val locationSharingMessage: SharedFlow<String> = _locationSharingMessage.asSharedFlow()
 
-        // LCS: user-facing result of the "Request path" message action. A path
-        // request is fire-and-forget at the protocol level — nothing comes back to
-        // say it worked — so the UI can only confirm that one was sent. Collected by
-        // MessagingScreen and shown as a Toast.
-        private val _pathRequestMessage = MutableSharedFlow<String>(extraBufferCapacity = 4)
-        val pathRequestMessage: SharedFlow<String> = _pathRequestMessage.asSharedFlow()
-
         /**
-         * LCS: one-line results from [pingCurrentConversation]. Kept separate from
-         * [pathRequestMessage] rather than renaming that into a shared channel,
-         * because the two are triggered by different menu items and a reader
-         * should be able to tell from the name which action produced a notice.
+         * LCS: one-line results from [pingCurrentConversation].
+         *
+         * There used to be a second channel beside this one for a separate
+         * "Request path" action. That action has been folded into the ping, which
+         * now refreshes the route and then attempts a link regardless — a path
+         * request on its own cannot cross a hop, so it could never report
+         * anything worth reading.
          */
         private val _linkProbeMessage = MutableSharedFlow<String>(extraBufferCapacity = 4)
         val linkProbeMessage: SharedFlow<String> = _linkProbeMessage.asSharedFlow()
@@ -2583,20 +2579,30 @@ class MessagingViewModel
         }
 
         /**
-         * LCS: measure whether this peer is reachable right now, and how far off.
+         * LCS: find out whether this peer is reachable, and try to make them so.
          *
-         * Sits above Request path in the overflow menu because it answers the
-         * question a user usually has first — "is this even working?" — where
-         * Request path is the remedy rather than the diagnosis.
+         * This replaced a separate "Request path" action, which could not work.
+         * A path request does not cross a hop: the first transport node holding
+         * any entry for the destination answers it from its own packet cache and
+         * stops it there, so when that node is the one with the stale entry, no
+         * amount of asking reaches the far side and the radio never keys.
          *
-         * Nothing is delivered to the peer. [RnsCore.probeLinkSpeed] establishes
-         * or reuses an `RNS.Link` and reads its metrics; it does not send an LXMF
-         * message, so a ping cannot leave anything in the other side's chat.
+         * A link attempt does cross. When a transport node relays a LINKREQUEST
+         * whose proof never arrives, it marks its own path unresponsive and asks
+         * for a new one on every interface except the one the request came in on
+         * — which is the only way a path request ends up being transmitted over
+         * the far side's radio. So the backend now refreshes the route, then
+         * builds the link *whether or not* a route answered, and announces us if
+         * nothing did (which lets the far side open a link back to us, and LXMF
+         * will deliver over an inbound link without needing a path of our own).
          *
-         * The probe deliberately degrades to path-table heuristics instead of
-         * failing when a peer will not accept a link, so a reachable result with
-         * no round-trip figure is still informative: a route is known and its hop
-         * count with it, we just never got a link up to time.
+         * Nothing is delivered to the peer: this establishes or reuses an
+         * `RNS.Link` and reads its metrics, it does not send an LXMF message.
+         *
+         * Results distinguish a measured link from a believed route — see
+         * [describeProbeResult]. That distinction is the whole diagnostic: a
+         * route that is known but will not carry a link is the signature of an
+         * upstream node replaying a cached announce.
          */
         fun pingCurrentConversation() {
             viewModelScope.launch(pathRequestDispatcher) {
@@ -2618,7 +2624,10 @@ class MessagingViewModel
                 // Said up front because the probe waits on link establishment,
                 // which can run to its timeout — without this the menu closes and
                 // nothing appears to have happened for ten seconds.
-                _linkProbeMessage.emit("Pinging…")
+                // The backend refreshes the route and then waits out a link
+                // attempt, so this can run to twenty seconds. Without a word up
+                // front the menu just closes and nothing appears to happen.
+                _linkProbeMessage.emit("Checking the route and trying a link…")
 
                 val result =
                     runCatching { rnsCore.probeLinkSpeed(destBytes) }
@@ -2632,7 +2641,17 @@ class MessagingViewModel
             }
         }
 
-        /** One short line for a toast, per [LinkSpeedProbeResult.status]. */
+        /**
+         * One short line for a toast, per [LinkSpeedProbeResult.status].
+         *
+         * "Reachable" is said only for a link that actually came up, because that
+         * is the only outcome that proves anything end to end. `path_only` is the
+         * interesting failure: a route is known but no link would form on it,
+         * which is what an upstream transport node replaying a cached announce
+         * looks like from here. Saying "Reachable" there is what let the old
+         * probe agree a peer was fine moments before every message to them
+         * failed.
+         */
         private fun describeProbeResult(result: LinkSpeedProbeResult): String =
             when (result.status) {
                 "success" ->
@@ -2642,55 +2661,20 @@ class MessagingViewModel
                         result.hops?.let { append(", $it ${if (it == 1) "hop" else "hops"}") }
                         if (result.linkReused) append(" (existing link)")
                     }
-                "no_path" -> "No route to this peer. Try Request path."
+                "path_only" ->
+                    buildString {
+                        append("A route is known")
+                        result.hops?.let { append(" ($it ${if (it == 1) "hop" else "hops"})") }
+                        append(", but no link would form on it — it is probably stale. ")
+                        append("Announced us so they can reach back; try again in a minute.")
+                    }
+                "no_path" ->
+                    "Nothing answered, and no link would form. Announced us so they can " +
+                        "reach back — try again in a minute."
                 "no_identity" -> "No identity known for this peer yet — they need to announce once."
                 "timeout" -> "No answer before the probe timed out. They may be offline."
                 else -> result.error?.let { "Ping failed: $it" } ?: "Ping failed."
             }
-
-        /**
-         * LCS: ask the network for a route to the peer of the open conversation.
-         *
-         * Exposed on the chat's overflow menu so a user who can see messages sitting
-         * unsent — or who knows a repeater just came back up — can trigger route
-         * discovery without waiting for the automatic attempt or for RNS to expire
-         * the stale entry on its own.
-         *
-         * A path is a property of the peer rather than of any one message, so this is
-         * scoped to the conversation: [_currentConversation] is the destination the
-         * chat is open on, and there is nothing a message id would add.
-         *
-         * Bypasses [IdentityResolutionManager.forcePathRequest]'s cooldown: this only
-         * runs when someone deliberately tapped it, and an explicit action that
-         * silently does nothing is worse than the airtime it costs.
-         */
-        fun requestPathForCurrentConversation() {
-            viewModelScope.launch(pathRequestDispatcher) {
-                val destinationHash = _currentConversation.value
-
-                if (destinationHash.isNullOrBlank()) {
-                    Log.e(TAG, "Cannot request path: no conversation is open")
-                    _pathRequestMessage.emit("Open a conversation first.")
-                    return@launch
-                }
-
-                val issued =
-                    runCatching {
-                        identityResolutionManager.forcePathRequest(destinationHash, respectCooldown = false)
-                    }.getOrElse { e ->
-                        Log.e(TAG, "Path request threw for ${destinationHash.take(8)}...", e)
-                        false
-                    }
-
-                _pathRequestMessage.emit(
-                    if (issued) {
-                        "Path request sent. Routes can take a moment to come back."
-                    } else {
-                        "Couldn't send a path request — check that an interface is connected."
-                    },
-                )
-            }
-        }
 
         /**
          * Retry sending a failed message.
