@@ -59,6 +59,18 @@ upstream; upstream's own history is not repeated here.
   Covered by `test_event_bridge_path_refresh.py` (16 tests), including a case
   that deletes the cached announce mid-wait to prove it comes back.
 
+### Removed
+
+- **The app-side path request to the propagation node.** The backend ladder took
+  this over in 2.3.1: it asks about the node at the moment a propagated send
+  fails, keyed on the node's own hash with its own budget, and re-sends the
+  message if the route comes back. By the time `FAILED` reached
+  `DeliveryStatusCollector` all of that had already happened and failed, so
+  asking again only spent a second broadcast at the bottom of a total-failure
+  chain. It was never a working backstop for the `kotlinBackend` flavor either —
+  that flavor's `requestPath` is a bare `Transport.requestPath`, and a request
+  without an expiry cannot replace the stale entry it is asking about.
+
 ---
 
 ## 2.3.1 — 2026-10-21

@@ -157,10 +157,18 @@ class DeliveryStatusCollector
             if (directRouteFailed(update, message)) {
                 requestPathAfterDeliveryFailure(message.conversationHash)
             }
-            if (propagationRouteFailed(update, message)) {
-                requestPathToPropagationNode()
-            }
 
+            // Deliberately nothing here for a *propagated* failure. There used to
+            // be a path request aimed at the propagation node, which the backend
+            // ladder now does itself at the moment the propagated send fails —
+            // keyed on the node's own hash, with its own budget, and followed by a
+            // re-send if the route comes back. Asking again here only spent a
+            // second broadcast at the very bottom of a total-failure chain.
+            //
+            // It was never a working backstop for `kotlinBackend` either: that
+            // flavor's `requestPath` is a bare `Transport.requestPath` with no
+            // expiry, and a request without an expiry cannot replace the stale
+            // entry it is asking about. See NativeRnsBackendImpl.requestPath.
             Log.d(TAG, "Updated message ${update.messageHash.take(16)}... status to ${update.status.wireValue}")
         }
 
@@ -219,17 +227,6 @@ class DeliveryStatusCollector
                 else -> false
             }
 
-        /**
-         * LCS: the last leg. A propagated message that failed means the propagation
-         * node was unreachable; asking for a path to the peer would be pointless
-         * because the peer was never the next hop.
-         */
-        @VisibleForTesting
-        internal fun propagationRouteFailed(
-            update: DeliveryStatusUpdate,
-            message: MessageEntity,
-        ): Boolean = update.status == DeliveryStatus.FAILED && message.deliveryMethod == "propagated"
-
         private suspend fun enrichSentInterfaceOnDelivery(message: MessageEntity) {
             if (!message.isFromMe || message.sentInterface != null) return
             try {
@@ -284,31 +281,6 @@ class DeliveryStatusCollector
             scope.launch(pathRequestDispatcher) {
                 runCatching { identityResolutionManager.forcePathRequest(destinationHash) }
                     .onFailure { e -> Log.e(TAG, "Path request after delivery failure threw", e) }
-            }
-        }
-
-        /**
-         * LCS: ask for a route to the configured outbound propagation node, after a
-         * propagated message failed to reach it.
-         *
-         * Keyed on the node's own hash, so the per-destination cooldown in
-         * [IdentityResolutionManager.forcePathRequest] rate-limits node requests
-         * separately from peer requests rather than one starving the other.
-         */
-        private fun requestPathToPropagationNode() {
-            scope.launch(pathRequestDispatcher) {
-                val nodeHash =
-                    runCatching { rnsLxmf.getOutboundPropagationNode().getOrNull() }
-                        .getOrNull()
-                        ?.takeIf { it.isNotBlank() }
-
-                if (nodeHash == null) {
-                    Log.d(TAG, "Propagated delivery failed with no propagation node configured")
-                    return@launch
-                }
-
-                runCatching { identityResolutionManager.forcePathRequest(nodeHash) }
-                    .onFailure { e -> Log.e(TAG, "Path request for propagation node threw", e) }
             }
         }
 

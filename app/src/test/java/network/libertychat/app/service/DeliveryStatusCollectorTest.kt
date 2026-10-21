@@ -289,30 +289,17 @@ class DeliveryStatusCollectorTest {
         }
 
     @Test
-    fun `a failed propagated message asks about the node, not the peer`() =
+    fun `a failed propagated message asks for nothing here`() =
         runCollectorTest {
-            // The peer was never the next hop, so asking about them is pointless.
+            // The backend ladder owns this rung now: it asks about the node at the
+            // moment the propagated send fails, keyed on the node's own hash, and
+            // re-sends if the route comes back. By the time FAILED reaches here
+            // that has already happened and failed, so a second request would only
+            // spend airtime at the bottom of a total-failure chain.
             val hash = "failed_propagated_hash"
-            val nodeHash = "00112233445566770011223344556677"
             givenRow(hash, message(hash, status = "propagated", deliveryMethod = "propagated"))
-            coEvery { rnsLxmf.getOutboundPropagationNode() } returns Result.success(nodeHash)
-            val requestedHash = slot<String>()
-            coEvery {
-                identityResolutionManager.forcePathRequest(capture(requestedHash), any())
-            } returns true
-
-            collector.handleDeliveryStatusUpdate(update(hash, DeliveryStatus.FAILED))
-            advanceUntilIdle()
-
-            assertEquals(nodeHash, requestedHash.captured)
-        }
-
-    @Test
-    fun `a failed propagated message asks for nothing when no node is configured`() =
-        runCollectorTest {
-            val hash = "failed_propagated_no_node"
-            givenRow(hash, message(hash, status = "propagated", deliveryMethod = "propagated"))
-            coEvery { rnsLxmf.getOutboundPropagationNode() } returns Result.success(null)
+            coEvery { rnsLxmf.getOutboundPropagationNode() } returns
+                Result.success("00112233445566770011223344556677")
 
             collector.handleDeliveryStatusUpdate(update(hash, DeliveryStatus.FAILED))
             advanceUntilIdle()
