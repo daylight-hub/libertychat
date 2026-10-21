@@ -2338,6 +2338,57 @@ def attach_lxmessage_callbacks(
                 # A refusal must not mean silence here either.
                 _give_up()
 
+        def _submit_link_escalation():
+            """
+            LCS rung 2: re-send an opportunistic message over a link instead.
+
+            An opportunistic send is a single packet. It never builds an
+            `RNS.Link`, so no transport node along the way gets a link-table
+            entry for it — and a transport node's *only* self-healing trigger is
+            a relayed `LINKREQUEST` whose proof never arrives. Without a link
+            attempt, nothing past the first hop is ever asked to look again, and
+            on an RF leg the radio simply stays silent while messages fail.
+
+            A path request does not substitute for this. The first node holding
+            any entry for the destination answers one from its own packet cache
+            and stops it there, so it cannot cross a hop. The link attempt is
+            what reaches the network, which is why it goes *ahead* of the path
+            rung rather than after it.
+
+            `desired_method` is moved to DIRECT and `packed` cleared so LXMF
+            repacks for link delivery. The same message object is re-sent, so
+            nothing is duplicated and the row updates in place.
+            """
+            with attempt_lock:
+                if attempt_state["value"] != "escalating" or _lxmf_router is not captured_router:
+                    return
+                msg.delivery_attempts = 0
+                msg.packed = None
+                msg.desired_method = LXMF.LXMessage.DIRECT
+                # Back to this same callback, so a failed link falls through to
+                # the path rung and then propagation as usual.
+                msg.register_failed_callback(_failed)
+                attempt_state["value"] = "admitted"
+
+            try:
+                captured_router.handle_outbound(msg)
+            except Exception as e:  # noqa: BLE001
+                RNS.log(
+                    f"event_bridge: link escalation failed to submit: {e}",
+                    RNS.LOG_ERROR,
+                )
+                with attempt_lock:
+                    attempt_state["value"] = "primary"
+                _propagate_or_give_up()
+            else:
+                with attempt_lock:
+                    if attempt_state["value"] == "admitted":
+                        attempt_state["value"] = "submitted"
+                RNS.log(
+                    "event_bridge: opportunistic delivery failed, escalating to a link",
+                    RNS.LOG_DEBUG,
+                )
+
         def _submit_propagated():
             with attempt_lock:
                 if attempt_state["value"] != "scheduled" or _lxmf_router is not captured_router:
@@ -2386,11 +2437,12 @@ def attach_lxmessage_callbacks(
                 _give_up()
 
         try_rediscover = False
+        try_escalate = False
         with attempt_lock:
             state = attempt_state["value"]
             if state in (
                 "delivered", "failed", "scheduled", "admitted",
-                "rediscovering", "node_rediscovering",
+                "rediscovering", "node_rediscovering", "escalating",
             ):
                 return
             if state == "propagated":
@@ -2402,10 +2454,36 @@ def attach_lxmessage_callbacks(
             already_propagated = (
                 getattr(msg, "desired_method", None) == LXMF.LXMessage.PROPAGATED
             )
-            if not getattr(msg, "_columba_path_retry_attempted", False) and not already_propagated:
+            # Was this sent as a single packet? `determineDeliveryMethod` picks
+            # OPPORTUNISTIC for any short message without attachments, which is
+            # most of them, so this is the common case rather than the exception.
+            sent_opportunistically = LXMF.LXMessage.OPPORTUNISTIC in (
+                getattr(msg, "method", None),
+                getattr(msg, "desired_method", None),
+            )
+
+            if (
+                sent_opportunistically
+                and not already_propagated
+                and not getattr(msg, "_columba_link_escalation_attempted", False)
+            ):
+                # Rung 2, ahead of the path rung: only a link attempt reaches
+                # past the first hop. See _submit_link_escalation.
+                msg._columba_link_escalation_attempted = True
+                attempt_state["value"] = "escalating"
+                try_escalate = True
+            elif not getattr(msg, "_columba_path_retry_attempted", False) and not already_propagated:
                 msg._columba_path_retry_attempted = True
                 attempt_state["value"] = "rediscovering"
                 try_rediscover = True
+
+        if try_escalate:
+            if not _enqueue_fallback(_submit_link_escalation):
+                with attempt_lock:
+                    if attempt_state["value"] == "escalating":
+                        attempt_state["value"] = state
+                _propagate_or_give_up()
+            return
 
         if try_rediscover:
             destination_hash = None

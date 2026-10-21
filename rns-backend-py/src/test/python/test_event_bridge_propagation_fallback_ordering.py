@@ -95,7 +95,11 @@ class PropagationFallbackOrderingTest(unittest.TestCase):
         setattr(
             lxmf,
             "LXMessage",
-            type("LXMessage", (), {"PROPAGATED": 3, "SENT": 4, "DELIVERED": 8}),
+            type(
+                "LXMessage",
+                (),
+                {"OPPORTUNISTIC": 1, "DIRECT": 2, "PROPAGATED": 3, "SENT": 4, "DELIVERED": 8},
+            ),
         )
         sys.modules["LXMF"] = lxmf
 

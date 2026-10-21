@@ -84,7 +84,15 @@ class PathRefreshTest(unittest.TestCase):
 
         lxmf = types.ModuleType("LXMF")
         setattr(lxmf, "LXStamper", type("LXStamper", (), {}))
-        setattr(lxmf, "LXMessage", type("LXMessage", (), {"PROPAGATED": 3, "SENT": 4, "DELIVERED": 8}))
+        setattr(
+            lxmf,
+            "LXMessage",
+            type(
+                "LXMessage",
+                (),
+                {"OPPORTUNISTIC": 1, "DIRECT": 2, "PROPAGATED": 3, "SENT": 4, "DELIVERED": 8},
+            ),
+        )
         sys.modules["LXMF"] = lxmf
 
         spec = importlib.util.spec_from_file_location("event_bridge_refresh_test", EVENT_BRIDGE_PATH)

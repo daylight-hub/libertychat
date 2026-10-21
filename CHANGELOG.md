@@ -13,6 +13,24 @@ upstream; upstream's own history is not repeated here.
 
 ### Added
 
+- **A failed opportunistic send is now escalated to a link before anything
+  else.** This was the missing rung, and it is why the radio stayed silent while
+  messages failed. `determineDeliveryMethod` picks OPPORTUNISTIC for any message
+  under 295 bytes with no attachments — which is most of them — and an
+  opportunistic send is a single packet that builds no `RNS.Link`. No link means
+  no transport node along the way ever gets a link-table entry, and a relayed
+  `LINKREQUEST` whose proof never arrives is a transport node's *only*
+  self-healing trigger: that is what makes it mark its own path unresponsive and
+  ask for a new one on every interface except the one the request came in on.
+  A path request is not a substitute. The first node holding any entry for the
+  destination answers one from its own packet cache and stops it there, so it
+  cannot cross a hop at all. That is why the link attempt goes *ahead* of the
+  path rung rather than after it.
+  The ladder is now: opportunistic → **link** → rediscover the route → retry →
+  propagation → announce → fail. The same message object is re-sent with
+  `desired_method` moved to DIRECT, so nothing is duplicated and the row updates
+  in place.
+
 - **A failed send now announces us, when rediscovery comes back empty.** This is
   the only move left at that point, and it works for a reason that is not
   obvious: a path request *cannot* cross a hop — the first transport node holding

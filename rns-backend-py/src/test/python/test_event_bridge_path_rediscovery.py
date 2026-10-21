@@ -138,7 +138,11 @@ class PathRediscoveryTest(unittest.TestCase):
         setattr(
             lxmf,
             "LXMessage",
-            type("LXMessage", (), {"PROPAGATED": 3, "SENT": 4, "DELIVERED": 8}),
+            type(
+                "LXMessage",
+                (),
+                {"OPPORTUNISTIC": 1, "DIRECT": 2, "PROPAGATED": 3, "SENT": 4, "DELIVERED": 8},
+            ),
         )
         sys.modules["LXMF"] = lxmf
 
@@ -552,6 +556,113 @@ class PathRediscoveryTest(unittest.TestCase):
         )
         self.assertEqual([], self._asked_about(NODE_HASH))
         self.assertEqual(0, router.submits)
+
+    # ---------------- rung 2: escalating an opportunistic send to a link ----------------
+
+    def test_a_failed_opportunistic_send_escalates_to_a_link(self):
+        # The rung that was missing. determineDeliveryMethod picks OPPORTUNISTIC
+        # for any short message without attachments, which is most of them, and a
+        # single packet builds no link — so no transport node along the way ever
+        # gets a link-table entry, and a relayed LINKREQUEST whose proof never
+        # arrives is a transport node's only self-healing trigger.
+        setattr(self.rns, "Transport", SelectiveTransport(self.events))
+        message = Message(desired_method=1)
+        router = Router(self.events)
+        self._attach(message, router)
+
+        message.failed_callback(message)
+
+        self._wait_until(lambda: router.submits >= 1, message="nothing was re-sent")
+        self.assertEqual(2, message.desired_method, "should be re-sent as DIRECT")
+        self.assertEqual(("submit", 2), self.events[-1])
+
+    def test_the_link_attempt_comes_before_any_path_request(self):
+        # Ordering is the point: a path request cannot cross a hop, so asking
+        # first wastes the airtime that the link attempt needs.
+        setattr(self.rns, "Transport", SelectiveTransport(self.events))
+        message = Message(desired_method=1)
+        router = Router(self.events)
+        self._attach(message, router)
+
+        message.failed_callback(message)
+        self._wait_until(lambda: router.submits >= 1, message="no escalation")
+
+        names = [name for name, _ in self.events]
+        self.assertIn("submit", names)
+        self.assertNotIn(
+            "request_path",
+            names[: names.index("submit")],
+            "no path request should precede the link attempt",
+        )
+
+    def test_a_failed_link_then_falls_through_to_the_path_rung(self):
+        setattr(self.rns, "Transport", SelectiveTransport(self.events))
+        message = Message(desired_method=1)
+        router = Router(self.events)
+        self._attach(message, router)
+
+        message.failed_callback(message)
+        self._wait_until(lambda: router.submits >= 1, message="no escalation")
+        # The escalated link fails in turn; LXMF would call this back.
+        message.failed_callback(message)
+
+        self._wait_until(
+            lambda: self._asked_about(PEER_HASH),
+            message="the path rung never ran after the link failed",
+        )
+        self.assertEqual(["expire_path", "request_path"], self._asked_about(PEER_HASH))
+
+    def test_the_escalation_is_only_attempted_once(self):
+        setattr(self.rns, "Transport", SelectiveTransport(self.events))
+        message = Message(desired_method=1)
+        router = Router(self.events)
+        self._attach(message, router)
+
+        message.failed_callback(message)
+        self._wait_until(lambda: router.submits >= 1, message="no escalation")
+        message.failed_callback(message)
+        self._wait_until(
+            lambda: self._asked_about(PEER_HASH), message="no path rung",
+        )
+        message.failed_callback(message)
+
+        self._wait_until(
+            lambda: router.submits >= 2 or "failed" in [n for n, _ in self.events],
+            message="the ladder stalled",
+        )
+        self.assertTrue(
+            message._columba_link_escalation_attempted,
+            "the marker must stop a second escalation",
+        )
+
+    def test_a_direct_send_is_not_escalated_and_goes_straight_to_the_path_rung(self):
+        setattr(self.rns, "Transport", SelectiveTransport(self.events))
+        message = Message()  # DIRECT
+        router = Router(self.events)
+        self._attach(message, router)
+
+        message.failed_callback(message)
+
+        self._wait_until(
+            lambda: self._asked_about(PEER_HASH),
+            message="a direct failure should ask about the route immediately",
+        )
+        self.assertFalse(getattr(message, "_columba_link_escalation_attempted", False))
+
+    def test_an_already_propagated_message_is_not_escalated(self):
+        setattr(self.rns, "Transport", SelectiveTransport(self.events))
+        message = Message(desired_method=3)  # PROPAGATED
+        router = Router(self.events)
+        self._attach(message, router)
+
+        message.failed_callback(message)
+
+        self._wait_until(
+            lambda: self._asked_about(NODE_HASH) or "failed" in [n for n, _ in self.events],
+            message="the propagated branch stalled",
+        )
+        self.assertFalse(getattr(message, "_columba_link_escalation_attempted", False))
+        self.assertEqual([], self._asked_about(PEER_HASH), "the peer is not the failed hop")
 
 
 if __name__ == "__main__":
