@@ -71,6 +71,12 @@ class Router:
         self.events = events
         self.submitted = threading.Event()
         self.submits = 0
+        self.delivery_destinations = {b"my-own-destination": object()}
+        self.announced = []
+
+    def announce(self, destination_hash):
+        self.announced.append(destination_hash)
+        self.events.append(("announce", destination_hash))
 
     def handle_outbound(self, message):
         self.submits += 1
@@ -663,6 +669,69 @@ class PathRediscoveryTest(unittest.TestCase):
         )
         self.assertFalse(getattr(message, "_columba_link_escalation_attempted", False))
         self.assertEqual([], self._asked_about(PEER_HASH), "the peer is not the failed hop")
+
+    # ---------------- announce when asking is no longer possible ----------------
+
+    def test_a_refused_path_request_still_announces(self):
+        # The worst case was announcing least. A spent budget means asking is
+        # over for this peer, so being findable is the only move left — and a
+        # refusal never reaches refresh_path, where the other announce lives.
+        setattr(self.rns, "Transport", SelectiveTransport(self.events))
+        self.module._announce_on_failure_at.clear()
+        # Spend the budget so the next request is refused outright.
+        self.module._path_retry_attempts[PEER_HASH] = {
+            "count": self.module.PATH_RETRY_MAX_ATTEMPTS, "last": time.time(),
+        }
+        message = Message()  # DIRECT, so it goes straight to the path rung
+        router = Router(self.events)
+        self._attach(message, router)
+
+        message.failed_callback(message)
+
+        self._wait_until(
+            lambda: router.announced,
+            message="a refused request should still announce",
+        )
+        self.assertEqual([b"my-own-destination"], router.announced)
+        self.assertEqual(
+            [], self._asked_about(PEER_HASH), "the refusal means nothing was asked",
+        )
+
+    def test_a_refused_request_still_falls_through_to_propagation(self):
+        setattr(self.rns, "Transport", SelectiveTransport(self.events))
+        self.module._announce_on_failure_at.clear()
+        self.module._path_retry_attempts[PEER_HASH] = {
+            "count": self.module.PATH_RETRY_MAX_ATTEMPTS, "last": time.time(),
+        }
+        message = Message()
+        router = Router(self.events)
+        self._attach(message, router)
+
+        message.failed_callback(message)
+
+        self._wait_until(
+            lambda: router.submits >= 1,
+            message="a refusal must not swallow the message",
+        )
+        self.assertEqual(3, message.desired_method, "propagated")
+
+    def test_the_announce_floor_still_applies_to_a_refusal(self):
+        setattr(self.rns, "Transport", SelectiveTransport(self.events))
+        self.module._announce_on_failure_at.clear()
+        self.module._announce_on_failure_at[PEER_HASH] = time.time()
+        self.module._path_retry_attempts[PEER_HASH] = {
+            "count": self.module.PATH_RETRY_MAX_ATTEMPTS, "last": time.time(),
+        }
+        message = Message()
+        router = Router(self.events)
+        self._attach(message, router)
+
+        message.failed_callback(message)
+
+        self._wait_until(lambda: router.submits >= 1, message="no propagation")
+        self.assertEqual(
+            [], router.announced, "announced too recently to announce again",
+        )
 
 
 if __name__ == "__main__":

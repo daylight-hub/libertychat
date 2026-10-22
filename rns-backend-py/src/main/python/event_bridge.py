@@ -2502,6 +2502,22 @@ def attach_lxmessage_callbacks(
                 # Throttled, queue full, or no destination to ask about. A
                 # refusal must not mean silence — propagate now rather than
                 # leaving the message waiting for something that is not coming.
+                #
+                # And announce. This is the case where being findable matters
+                # most, not least: the budget being spent means asking is over
+                # for this peer, so the only move left is to make it possible
+                # for them to reach us and open a link we can deliver over.
+                # refresh_path covers the "asked and nothing answered" case, but
+                # a refusal never reaches refresh_path at all — which left the
+                # worst outcome as the one that announced least.
+                if destination_hash is not None:
+                    try:
+                        announce_self_for_unreachable_peer(destination_hash)
+                    except Exception as e:  # noqa: BLE001 — never block the fallback
+                        RNS.log(
+                            f"event_bridge: announce after a refused request failed: {e}",
+                            RNS.LOG_ERROR,
+                        )
                 with attempt_lock:
                     if attempt_state["value"] == "rediscovering":
                         attempt_state["value"] = state

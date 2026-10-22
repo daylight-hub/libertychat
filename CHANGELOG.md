@@ -47,6 +47,11 @@ upstream; upstream's own history is not repeated here.
   rediscovery budget, because this is broadcast on every interface and costs real
   airtime on a slow one. Cleared when we hear an announce from that peer, since
   there is no point announcing at someone we just heard from.
+  **A request refused by the per-peer budget announces too**, which is the case
+  where it matters most rather than least: the budget being spent means asking is
+  over for that peer, so making ourselves findable is the only move left. A
+  refusal never reaches `refresh_path`, where the other announce lives, so the
+  worst outcome was the one that announced least.
 
 ### Fixed
 
