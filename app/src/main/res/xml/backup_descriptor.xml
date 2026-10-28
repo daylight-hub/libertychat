@@ -7,4 +7,6 @@
     <include domain="database" path="." />
     <include domain="sharedpref" path="." />
     <include domain="file" path="." />
+    <!-- generated RNS config (Python backend) holds the LCS Global passphrase. -->
+    <exclude domain="file" path="reticulum/reticulum/config" />
 </full-backup-content>

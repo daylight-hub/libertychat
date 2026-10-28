@@ -409,6 +409,8 @@ class MainActivity : ComponentActivity() {
                     crashReportManager = crashReportManager,
                     detachedUsbDeviceEvents = detachedUsbDeviceEvents,
                 )
+                // trial-ending / trial-ended / renew reminders for LCS Global.
+                network.libertychat.app.gateway.ui.GatewayReminderHost()
             }
         }
 

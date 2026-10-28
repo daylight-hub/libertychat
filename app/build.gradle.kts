@@ -536,6 +536,10 @@ dependencies {
     // MessagePack - for LXMF stamp generation
     implementation("org.msgpack:msgpack-core:0.9.8")
 
+    // Ed25519/X25519 for signing LCS Gateway entitlement requests with the
+    // identity key. Same artifact and version reticulum-kt (rns-core) uses.
+    implementation("org.bouncycastle:bcprov-jdk18on:1.77")
+
     // MapLibre - for offline-capable maps
     implementation("org.maplibre.gl:android-sdk:12.3.1")
 

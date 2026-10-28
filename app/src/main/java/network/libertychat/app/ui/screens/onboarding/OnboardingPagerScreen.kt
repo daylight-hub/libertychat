@@ -221,6 +221,13 @@ fun OnboardingPagerScreen(
                                 onBack = { goBack() },
                                 onContinue = { goNext() },
                             )
+                        OnboardingPage.LCS_GLOBAL ->
+                            network.libertychat.app.ui.screens.onboarding.pages.LcsGlobalPage(
+                                selected = state.selectedInterfaces.contains(OnboardingInterfaceType.TCP),
+                                onSelectedChange = { viewModel.setInterfaceSelected(OnboardingInterfaceType.TCP, it) },
+                                onBack = { goBack() },
+                                onContinue = { goNext() },
+                            )
                         OnboardingPage.PERMISSIONS ->
                             PermissionsPage(
                                 notificationsGranted = state.notificationsGranted,

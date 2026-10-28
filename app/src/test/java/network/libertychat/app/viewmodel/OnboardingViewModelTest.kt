@@ -629,12 +629,15 @@ class OnboardingViewModelTest {
             viewModel.completeOnboarding { callbackCalled = true }
             advanceUntilIdle()
 
-            // Then: TCPClient should be created with default server
+            // Then: the LCS Gateway placeholder is created, disabled until the
+            // gateway manager starts the trial and receives a session.
             assertTrue("Callback should be called on completion", callbackCalled)
             coVerify {
                 mockInterfaceRepository.insertInterface(
                     match {
-                        it is InterfaceConfig.TCPClient && it.enabled
+                        it is InterfaceConfig.TCPClient &&
+                            it.name == network.libertychat.app.gateway.GatewayConfig.INTERFACE_NAME &&
+                            !it.enabled
                     },
                 )
             }
@@ -806,8 +809,8 @@ class OnboardingViewModelTest {
             val publicNode =
                 createTcpEntity(
                     id = 3,
-                    name = "LCS Public Node",
-                    host = "public.lcs.network",
+                    name = network.libertychat.app.gateway.GatewayConfig.INTERFACE_NAME,
+                    host = network.libertychat.app.gateway.GatewayConfig.PLACEHOLDER_HOST,
                     port = 4245,
                     enabled = false,
                 )
@@ -907,7 +910,8 @@ class OnboardingViewModelTest {
             coVerify {
                 mockInterfaceRepository.insertInterface(
                     match {
-                        it is InterfaceConfig.TCPClient && it.targetHost == "public.lcs.network"
+                        it is InterfaceConfig.TCPClient &&
+                            it.name == network.libertychat.app.gateway.GatewayConfig.INTERFACE_NAME
                     },
                 )
             }

@@ -242,7 +242,7 @@ class CompletePageTest {
         }
 
         // Then
-        composeTestRule.onNodeWithText("Internet (TCP)").assertIsDisplayed()
+        composeTestRule.onNodeWithText(OnboardingInterfaceType.TCP.displayName).assertIsDisplayed()
     }
 
     @Test

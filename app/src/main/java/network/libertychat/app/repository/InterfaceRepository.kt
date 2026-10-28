@@ -179,6 +179,25 @@ class InterfaceRepository
          * @throws IllegalStateException if JSON is corrupted or invalid
          */
         fun entityToConfig(entity: InterfaceEntity): InterfaceConfig =
+            // the LCS Global row stores only a placeholder; its live target comes from
+            // GatewaySecrets (encrypted, never backed up).
+            network.libertychat.app.gateway.GatewaySecrets.apply(
+                entityToStoredConfig(entity).let { stored ->
+                    // a hand-made, imported or restored TCP Client aimed at an LCS machine is
+                    // never started (only the managed LCS Global row may reach the gateway).
+                    if (stored is InterfaceConfig.TCPClient &&
+                        !network.libertychat.app.gateway.GatewayConfig.isGateway(entity.name) &&
+                        network.libertychat.app.gateway.ReservedHosts.isReserved(stored.targetHost)
+                    ) {
+                        stored.copy(enabled = false)
+                    } else {
+                        stored
+                    }
+                },
+                entity.name,
+            )
+
+        private fun entityToStoredConfig(entity: InterfaceEntity): InterfaceConfig =
             try {
                 val json = JSONObject(entity.configJson)
 

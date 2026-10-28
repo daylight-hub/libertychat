@@ -31,8 +31,9 @@ data class TcpCommunityServer(
 object TcpCommunityServers {
     val servers: List<TcpCommunityServer> =
         listOf(
-            // LCS: official Liberty Communication Systems public node (bootstrap interface)
-            TcpCommunityServer("LCS Public Node", "public.lcs.network", 4245, isBootstrap = true),
+            // LCS Global is not listed here. It is a subscription service whose
+            // address and passphrase come from the entitlement server (see gateway/), and
+            // it is offered separately at the top of this screen and in onboarding.
             // LCS: local-network RNode — bootstrap interface OFF so it stays connected
             TcpCommunityServer("Local IP RNode", "iprnode.local", 4545, isBootstrap = false),
             // LCS: direct TCP path to a Command Center on the local network, for when

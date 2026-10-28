@@ -17,7 +17,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
@@ -129,14 +128,7 @@ fun ConnectivityPage(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        InterfaceCard(
-            interfaceType = OnboardingInterfaceType.TCP,
-            isSelected = selectedInterfaces.contains(OnboardingInterfaceType.TCP),
-            onClick = { onInterfaceToggle(OnboardingInterfaceType.TCP) },
-            icon = Icons.Default.Language,
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
+        // LCS Global (internet) has its own onboarding page right after this one.
 
         InterfaceCard(
             interfaceType = OnboardingInterfaceType.RNODE,

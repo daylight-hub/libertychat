@@ -113,26 +113,6 @@ class ConnectivityPageTest {
     }
 
     @Test
-    fun interfaceOptions_displaysTcpOption() {
-        // Given/When
-        composeTestRule.setContent {
-            ConnectivityPage(
-                selectedInterfaces = emptySet(),
-                onInterfaceToggle = {},
-                blePermissionsGranted = false,
-                blePermissionsDenied = false,
-                onBack = {},
-                onContinue = {},
-            )
-        }
-
-        // Then - scroll to make visible if needed
-        composeTestRule.onNodeWithText(OnboardingInterfaceType.TCP.displayName)
-            .performScrollTo()
-            .assertIsDisplayed()
-    }
-
-    @Test
     fun interfaceOptions_displaysRnodeOption() {
         // Given/When
         composeTestRule.setContent {
@@ -153,7 +133,7 @@ class ConnectivityPageTest {
     }
 
     @Test
-    fun interfaceOptions_allFiveOptionsDisplayed() {
+    fun interfaceOptions_allFourOptionsDisplayed() {
         // Given/When
         composeTestRule.setContent {
             ConnectivityPage(
@@ -166,11 +146,10 @@ class ConnectivityPageTest {
             )
         }
 
-        // Then - verify all five interface types are visible (with scrolling for bottom items)
+        // Then - verify all four interface types are visible (with scrolling for bottom items)
         composeTestRule.onNodeWithText("Local WiFi").assertIsDisplayed()
         composeTestRule.onNodeWithText("Bluetooth LE").assertIsDisplayed()
         composeTestRule.onNodeWithText("Command Center PRO").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Internet (TCP)").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("LoRa Radio").performScrollTo().assertIsDisplayed()
     }
 
@@ -236,26 +215,6 @@ class ConnectivityPageTest {
 
         // Then
         composeTestRule.onNodeWithText(OnboardingInterfaceType.BLE.description).assertIsDisplayed()
-    }
-
-    @Test
-    fun interfaceDescriptions_displaysTcpDescription() {
-        // Given/When
-        composeTestRule.setContent {
-            ConnectivityPage(
-                selectedInterfaces = emptySet(),
-                onInterfaceToggle = {},
-                blePermissionsGranted = false,
-                blePermissionsDenied = false,
-                onBack = {},
-                onContinue = {},
-            )
-        }
-
-        // Then - scroll to make visible
-        composeTestRule.onNodeWithText(OnboardingInterfaceType.TCP.description)
-            .performScrollTo()
-            .assertIsDisplayed()
     }
 
     @Test
@@ -403,29 +362,6 @@ class ConnectivityPageTest {
     }
 
     @Test
-    fun interfaceToggle_tcpClick_triggersCallbackWithTcpType() {
-        // Given
-        var toggledInterface: OnboardingInterfaceType? = null
-
-        composeTestRule.setContent {
-            ConnectivityPage(
-                selectedInterfaces = emptySet(),
-                onInterfaceToggle = { toggledInterface = it },
-                blePermissionsGranted = false,
-                blePermissionsDenied = false,
-                onBack = {},
-                onContinue = {},
-            )
-        }
-
-        // When - scroll to and click
-        composeTestRule.onNodeWithText("Internet (TCP)").performScrollTo().performClick()
-
-        // Then
-        assertEquals(OnboardingInterfaceType.TCP, toggledInterface)
-    }
-
-    @Test
     fun interfaceToggle_rnodeClick_triggersCallbackWithRnodeType() {
         // Given
         var toggledInterface: OnboardingInterfaceType? = null
@@ -488,24 +424,6 @@ class ConnectivityPageTest {
     }
 
     @Test
-    fun selectedInterfaces_tcpSelected_showsAsChecked() {
-        // Given/When
-        composeTestRule.setContent {
-            ConnectivityPage(
-                selectedInterfaces = setOf(OnboardingInterfaceType.TCP),
-                onInterfaceToggle = {},
-                blePermissionsGranted = false,
-                blePermissionsDenied = false,
-                onBack = {},
-                onContinue = {},
-            )
-        }
-
-        // Then
-        composeTestRule.onAllNodes(isToggleable())[CARD_TCP].assertIsOn()
-    }
-
-    @Test
     fun selectedInterfaces_rnodeSelected_showsAsChecked() {
         // Given/When
         composeTestRule.setContent {
@@ -537,11 +455,10 @@ class ConnectivityPageTest {
             )
         }
 
-        // Then - all five checkboxes should be unchecked
+        // Then - all four checkboxes should be unchecked
         composeTestRule.onAllNodes(isToggleable())[CARD_AUTO].assertIsOff()
         composeTestRule.onAllNodes(isToggleable())[CARD_BLE].assertIsOff()
         composeTestRule.onAllNodes(isToggleable())[CARD_COMMAND_CENTER].assertIsOff()
-        composeTestRule.onAllNodes(isToggleable())[CARD_TCP].assertIsOff()
         composeTestRule.onAllNodes(isToggleable())[CARD_RNODE].assertIsOff()
     }
 
@@ -567,9 +484,24 @@ class ConnectivityPageTest {
         // Then - only the three selected types are checked
         composeTestRule.onAllNodes(isToggleable())[CARD_AUTO].assertIsOn()
         composeTestRule.onAllNodes(isToggleable())[CARD_BLE].assertIsOn()
-        composeTestRule.onAllNodes(isToggleable())[CARD_TCP].assertIsOn()
         composeTestRule.onAllNodes(isToggleable())[CARD_COMMAND_CENTER].assertIsOff()
         composeTestRule.onAllNodes(isToggleable())[CARD_RNODE].assertIsOff()
+    }
+
+    @Test
+    fun interfaceOptions_lcsGlobalIsNotOnThisPage() {
+        // LCS Global moved to its own onboarding page.
+        composeTestRule.setContent {
+            ConnectivityPage(
+                selectedInterfaces = emptySet(),
+                onInterfaceToggle = {},
+                blePermissionsGranted = false,
+                blePermissionsDenied = false,
+                onBack = {},
+                onContinue = {},
+            )
+        }
+        assertEquals(4, composeTestRule.onAllNodes(isToggleable()).fetchSemanticsNodes().size)
     }
 
     // ========== Navigation Button Tests ==========
@@ -792,7 +724,6 @@ class ConnectivityPageTest {
         composeTestRule.onAllNodes(isToggleable())[CARD_AUTO].assertIsOn()
         composeTestRule.onAllNodes(isToggleable())[CARD_BLE].assertIsOn()
         composeTestRule.onAllNodes(isToggleable())[CARD_COMMAND_CENTER].assertIsOn()
-        composeTestRule.onAllNodes(isToggleable())[CARD_TCP].assertIsOn()
         composeTestRule.onAllNodes(isToggleable())[CARD_RNODE].assertIsOn()
     }
 
@@ -857,16 +788,14 @@ class ConnectivityPageTest {
         composeTestRule.onNodeWithText("Local WiFi").performClick()
         composeTestRule.onNodeWithText("Bluetooth LE").performClick()
         composeTestRule.onNodeWithText("Command Center PRO").performScrollTo().performClick()
-        composeTestRule.onNodeWithText("Internet (TCP)").performScrollTo().performClick()
         composeTestRule.onNodeWithText("LoRa Radio").performScrollTo().performClick()
 
         // Then
-        assertEquals(5, toggledInterfaces.size)
+        assertEquals(4, toggledInterfaces.size)
         assertEquals(OnboardingInterfaceType.AUTO, toggledInterfaces[0])
         assertEquals(OnboardingInterfaceType.BLE, toggledInterfaces[1])
         assertEquals(OnboardingInterfaceType.COMMAND_CENTER, toggledInterfaces[2])
-        assertEquals(OnboardingInterfaceType.TCP, toggledInterfaces[3])
-        assertEquals(OnboardingInterfaceType.RNODE, toggledInterfaces[4])
+        assertEquals(OnboardingInterfaceType.RNODE, toggledInterfaces[3])
     }
 }
 
@@ -879,5 +808,5 @@ class ConnectivityPageTest {
 private const val CARD_AUTO = 0
 private const val CARD_BLE = 1
 private const val CARD_COMMAND_CENTER = 2
-private const val CARD_TCP = 3
-private const val CARD_RNODE = 4
+// no TCP card here any more; LCS Global has its own onboarding page.
+private const val CARD_RNODE = 3

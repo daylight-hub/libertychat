@@ -56,6 +56,11 @@ class MainActivityIntentHandler(
                 Log.d(logTag, "Opening LXMF deep link: $lxmaUrl")
                 pendingNavigation.value = PendingNavigation.AddContact(lxmaUrl)
             }
+            "libertychat" -> {
+                // Back from paying on lcs.network: just come to the front. The gateway
+                // manager re-checks the subscription whenever the app resumes.
+                Log.d(logTag, "Returned from lcs.network")
+            }
             "nomadnetwork" -> {
                 // Raw string parsing because nomadnetwork://hash:/path confuses
                 // Android's URI parser (colon treated as host:port separator)

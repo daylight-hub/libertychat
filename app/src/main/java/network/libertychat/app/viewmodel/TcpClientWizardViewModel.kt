@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import network.libertychat.app.data.model.TcpCommunityServer
 import network.libertychat.app.data.model.TcpCommunityServers
+import network.libertychat.app.gateway.GatewayConfig
+import network.libertychat.app.gateway.ReservedHosts
 import network.libertychat.app.repository.InterfaceRepository
 import network.libertychat.app.rns.api.model.InterfaceConfig
 import network.libertychat.app.rns.api.model.NetworkRestriction
@@ -381,6 +383,16 @@ class TcpClientWizardViewModel
                             return@launch
                         }
                         is ValidationResult.Success -> { /* Name is unique, continue */ }
+                    }
+
+                    // custom or edited connections can't point at the LCS machines (by name,
+                    // sub-name or address), and can't take the LCS Global name.
+                    val reservedName =
+                        (GatewayConfig.FORMER_INTERFACE_NAMES + GatewayConfig.INTERFACE_NAME)
+                            .any { it.equals(interfaceName, ignoreCase = true) }
+                    if (reservedName || ReservedHosts.isReservedResolved(currentState.targetHost)) {
+                        _state.update { it.copy(isSaving = false, saveError = ReservedHosts.MESSAGE) }
+                        return@launch
                     }
 
                     val config =

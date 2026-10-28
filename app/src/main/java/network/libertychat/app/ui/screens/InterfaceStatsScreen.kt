@@ -156,7 +156,9 @@ private fun StatsContent(
     val interfaceType = state.interfaceEntity?.type
 
     // Interfaces that support editing
-    val supportsEdit = interfaceType in listOf("TCPClient", "TCPServer", "RNode")
+    val supportsEdit =
+        interfaceType in listOf("TCPClient", "TCPServer", "RNode") &&
+            !network.libertychat.app.gateway.GatewayConfig.isGateway(state.interfaceEntity?.name)
 
     Column(
         modifier =

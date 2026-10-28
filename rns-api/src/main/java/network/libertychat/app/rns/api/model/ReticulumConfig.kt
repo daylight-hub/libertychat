@@ -237,7 +237,10 @@ sealed class InterfaceConfig : Parcelable {
         val discoveryScope: String = "link",
         val discoveryPort: Int? = null,
         val dataPort: Int? = null,
-        val mode: String = "full",
+        // new AutoInterfaces default to gateway mode so this node answers
+        // path requests for peers on the local segment (e.g. phones joining a
+        // Command Center's WiFi). Only takes effect when transport is enabled.
+        val mode: String = "gateway",
         override val networkRestriction: NetworkRestriction = NetworkRestriction.WIFI_ONLY,
     ) : InterfaceConfig() {
         override val typeName: String get() = "AutoInterface"

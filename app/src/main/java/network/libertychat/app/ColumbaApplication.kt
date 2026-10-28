@@ -116,6 +116,14 @@ class ColumbaApplication : Application() {
     @Inject
     lateinit var interfaceTransportObserver: network.libertychat.app.service.manager.InterfaceTransportObserver
 
+    // keeps LCS Global trial/subscription session alive.
+    @Inject
+    lateinit var gatewayAccessManager: network.libertychat.app.gateway.GatewayAccessManager
+
+    // "LCS Helpdesk" contact and welcome conversation for each identity.
+    @Inject
+    lateinit var helpdeskSeeder: network.libertychat.app.gateway.HelpdeskSeeder
+
     @Inject
     lateinit var autoInterfaceWatcher: network.libertychat.app.service.manager.AutoInterfaceWatcher
 
@@ -179,6 +187,9 @@ class ColumbaApplication : Application() {
         }
 
         android.util.Log.d("ColumbaApplication", "Main app process detected ($processName) - proceeding with auto-initialization")
+
+        // LCS Global's live host/passphrase store (must exist before configs are built).
+        network.libertychat.app.gateway.GatewaySecrets.init(this)
 
         // Preload theme preference into DataStore's in-memory cache
         // This eliminates theme flash on app startup by ensuring the theme is cached
@@ -615,6 +626,10 @@ class ColumbaApplication : Application() {
         // the filtered enabled set into the native stack. Safe to start before Reticulum is ready
         // (early `reloadInterfaces` calls just log a failure and the next transport change wins).
         interfaceTransportObserver.start(applicationScope)
+
+        // LCS Global trial/subscription upkeep (status, session refresh, firewall renewals).
+        gatewayAccessManager.start(applicationScope)
+        helpdeskSeeder.start(applicationScope)
 
         startPathTablePersistence()
         startAutoInterfaceRecovery()

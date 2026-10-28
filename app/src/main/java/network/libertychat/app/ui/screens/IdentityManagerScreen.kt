@@ -960,6 +960,19 @@ private fun DeleteIdentityDialog(
                 Text("- All messages")
                 Spacer(Modifier.height(8.dp))
                 Text("Export this identity first if you want to back it up.", style = MaterialTheme.typography.bodySmall)
+                // LCS Global trial/subscription is tied to this identity.
+                val gateway = network.libertychat.app.gateway.ui.rememberGatewayAccessManager()
+                val gatewayState = gateway?.state?.collectAsState()?.value
+                val linked = gateway != null && gatewayState != null && gateway.isLinked(identity.identityHash)
+                Text(
+                    if (linked) {
+                        network.libertychat.app.gateway.ui.IDENTITY_WARNING
+                    } else {
+                        "If this identity has an ${network.libertychat.app.gateway.GatewayConfig.PRODUCT_NAME} trial or subscription, deleting it removes this phone's gateway access."
+                    },
+                    style = if (linked) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+                    color = if (linked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         },
         confirmButton = {

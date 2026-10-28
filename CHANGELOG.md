@@ -9,6 +9,14 @@ upstream; upstream's own history is not repeated here.
 
 ---
 
+## 2.3.3
+
+### Changed
+
+- Onboarding, interface settings and connectivity improvements.
+- Contacts and conversation list updates.
+- Stability fixes.
+
 ## 2.3.2 — unreleased
 
 ### Added

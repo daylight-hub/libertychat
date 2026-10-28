@@ -319,6 +319,9 @@ fun SettingsScreen(
                     sharedInstanceOnline = state.sharedInstanceOnline,
                 )
 
+                // subscription status, subscribe, manage, link device.
+                network.libertychat.app.gateway.ui.GatewaySettingsCard()
+
                 IdentityCard(
                     isExpanded = state.cardExpansionStates[SettingsCardId.IDENTITY.name] ?: false,
                     onExpandedChange = { viewModel.toggleCardExpanded(SettingsCardId.IDENTITY, it) },

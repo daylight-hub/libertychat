@@ -120,7 +120,7 @@ abstract class InterfaceDatabase : RoomDatabase() {
                     "AutoInterface",
                     // enabled=true
                     1,
-                    """{"group_id":"","discovery_scope":"link","mode":"full"}""",
+                    """{"group_id":"","discovery_scope":"link","mode":"gateway"}""",
                     0,
                 ),
             )

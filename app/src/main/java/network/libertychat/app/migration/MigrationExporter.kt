@@ -1,5 +1,6 @@
 package network.libertychat.app.migration
 
+import network.libertychat.app.rns.api.model.toJsonString
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
@@ -343,11 +344,19 @@ class MigrationExporter
             val interfaces = interfaceDatabase.interfaceDao().getAllInterfaces().first()
             Log.d(TAG, "Collected ${interfaces.size} interfaces")
             return interfaces.map { iface ->
+                // LCS Global is exported as a disabled placeholder (no host, port or
+                // passphrase). After import, the app fetches a fresh session for that identity.
+                val gateway = iface.type == "TCPClient" && network.libertychat.app.gateway.GatewayConfig.isGateway(iface.name)
                 InterfaceExport(
                     name = iface.name,
                     type = iface.type,
-                    enabled = iface.enabled,
-                    configJson = iface.configJson,
+                    enabled = if (gateway) false else iface.enabled,
+                    configJson =
+                        if (gateway) {
+                            network.libertychat.app.gateway.GatewayConfig.placeholderInterface().toJsonString()
+                        } else {
+                            iface.configJson
+                        },
                     displayOrder = iface.displayOrder,
                 )
             }

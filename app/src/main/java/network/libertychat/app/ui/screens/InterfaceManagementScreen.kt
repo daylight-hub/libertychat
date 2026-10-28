@@ -391,7 +391,18 @@ fun InterfaceManagementScreen(
                                                 contextMenuInterface = null
                                                 when (iface.type) {
                                                     "RNode" -> onNavigateToRNodeWizard(iface.id)
-                                                    "TCPClient" -> onNavigateToTcpClientWizard(iface.id)
+                                                    "TCPClient" ->
+                                                        if (network.libertychat.app.gateway.GatewayConfig.isGateway(iface.name)) {
+                                                            // managed by the subscription; nothing to edit by hand.
+                                                            android.widget.Toast
+                                                                .makeText(
+                                                                    context,
+                                                                    "The ${network.libertychat.app.gateway.GatewayConfig.PRODUCT_NAME} is set up automatically. See Settings > ${network.libertychat.app.gateway.GatewayConfig.PRODUCT_NAME}.",
+                                                                    android.widget.Toast.LENGTH_LONG,
+                                                                ).show()
+                                                        } else {
+                                                            onNavigateToTcpClientWizard(iface.id)
+                                                        }
                                                     else -> viewModel.showEditDialog(iface)
                                                 }
                                             },
@@ -562,11 +573,28 @@ fun InterfaceManagementScreen(
     }
 
     // Interface type selection dialog
+    // trial / subscribe / redeem dialog for the subscription service.
+    var showGatewayOffer by remember { mutableStateOf(false) }
+    if (showGatewayOffer) {
+        // Only one LCS Global interface, ever: if it exists, show its status instead of
+        // offering to add it again (which also can't restart a used trial: see the server).
+        val alreadyAdded = state.interfaces.any { network.libertychat.app.gateway.GatewayConfig.isGateway(it.name) }
+        if (alreadyAdded) {
+            network.libertychat.app.gateway.ui.GatewayAlreadyAddedDialog(onDismiss = { showGatewayOffer = false })
+        } else {
+            network.libertychat.app.gateway.ui.GatewayOfferDialog(
+                onDismiss = { showGatewayOffer = false },
+                onDone = { showGatewayOffer = false },
+            )
+        }
+    }
+
     if (showTypeSelector) {
         InterfaceTypeSelector(
             onTypeSelected = { type ->
                 showTypeSelector = false
                 when (type) {
+                    network.libertychat.app.gateway.GatewayConfig.MENU_TYPE -> showGatewayOffer = true
                     "RNode" -> onNavigateToRNodeWizard(null)
                     "TCPClient" -> onNavigateToTcpClientWizard(null)
                     "TCPServer" -> {
@@ -574,6 +602,12 @@ fun InterfaceManagementScreen(
                         viewModel.updateConfigState {
                             it.copy(type = type, name = "TCP Server", mode = "full")
                         }
+                    }
+                    // AutoInterface added from Settings defaults to gateway mode,
+                    // matching the onboarding default in InterfaceConfig.AutoInterface.
+                    "AutoInterface" -> {
+                        viewModel.showAddDialog()
+                        viewModel.updateConfigState { it.copy(type = type, mode = "gateway") }
                     }
                     else -> {
                         viewModel.showAddDialog()
@@ -707,7 +741,12 @@ fun InterfaceCard(
             // Type icon with online status color. Reuses the canonical
             // interface-type → icon mapping shared with announce cards
             // (see PeerCard.interfaceTypeIconData) so there's one source of truth.
-            val typeLabel = getInterfaceTypeLabel(interfaceEntity.type)
+            val typeLabel =
+                if (network.libertychat.app.gateway.GatewayConfig.isGateway(interfaceEntity.name)) {
+                    "Internet gateway" // never call LCS Global a TCP client
+                } else {
+                    getInterfaceTypeLabel(interfaceEntity.type)
+                }
             val iconData = interfaceTypeIconData(InterfaceType.fromName(interfaceEntity.type))
             Icon(
                 imageVector = iconData?.imageVector ?: Icons.Default.SettingsInputAntenna,
@@ -1341,6 +1380,10 @@ private fun getInterfaceDescription(interfaceEntity: InterfaceEntity): String {
             if (groupId.isNotBlank()) groupId else "scope: $scope"
         }
         "TCPClient" -> {
+            // never show the gateway's address.
+            if (network.libertychat.app.gateway.GatewayConfig.isGateway(interfaceEntity.name)) {
+                return "Subscription gateway · Settings > ${network.libertychat.app.gateway.GatewayConfig.PRODUCT_NAME}"
+            }
             val host = json.optString("target_host", "")
             val port = json.optInt("target_port", 4242)
             if (host.isNotBlank()) "$host:$port" else ""
@@ -1401,6 +1444,13 @@ fun InterfaceTypeSelector(
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // the subscription service, offered as its own interface type. Its host,
+                // port and passphrase come from the server and are never shown or editable.
+                InterfaceTypeOption(
+                    title = network.libertychat.app.gateway.GatewayConfig.PRODUCT_NAME,
+                    description = "Reach the Liberty network from anywhere. Free ${network.libertychat.app.gateway.GatewayConfig.TRIAL_DAYS}-day trial",
+                    onClick = { onTypeSelected(network.libertychat.app.gateway.GatewayConfig.MENU_TYPE) },
+                )
                 InterfaceTypeOption(
                     title = "Auto Discovery",
                     description = "Automatically discover peers on local network",

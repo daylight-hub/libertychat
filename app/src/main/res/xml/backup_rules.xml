@@ -29,11 +29,14 @@
         <include domain="database" path="." />
         <include domain="sharedpref" path="." />
         <include domain="file" path="." />
+        <!-- generated RNS config (Python backend) holds the LCS Global passphrase. -->
+        <exclude domain="file" path="reticulum/reticulum/config" />
     </cloud-backup>
 
     <device-transfer>
         <include domain="database" path="." />
         <include domain="sharedpref" path="." />
         <include domain="file" path="." />
+        <exclude domain="file" path="reticulum/reticulum/config" />
     </device-transfer>
 </data-extraction-rules>

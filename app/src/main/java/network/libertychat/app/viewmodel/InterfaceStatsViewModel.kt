@@ -171,7 +171,11 @@ class InterfaceStatsViewModel
                                 isLoading = false,
                                 connectionMode = parsedConfig.connectionMode,
                                 targetDeviceName = parsedConfig.targetDeviceName,
-                                tcpHost = parsedConfig.tcpHost,
+                                // never show the gateway's address.
+                                tcpHost =
+                                    parsedConfig.tcpHost?.takeUnless {
+                                        network.libertychat.app.gateway.GatewayConfig.isGateway(entity.name)
+                                    },
                                 tcpPort = parsedConfig.tcpPort,
                                 usbDeviceId = parsedConfig.usbDeviceId,
                                 frequency = parsedConfig.frequency,

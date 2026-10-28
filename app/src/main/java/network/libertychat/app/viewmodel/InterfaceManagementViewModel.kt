@@ -672,6 +672,14 @@ class InterfaceManagementViewModel
                 try {
                     val config = configStateToInterfaceConfig(_configState.value)
                     val editingId = _state.value.editingInterface?.id
+                    // also refuse a name that resolves to an LCS machine's address.
+                    if (config is InterfaceConfig.TCPClient &&
+                        network.libertychat.app.gateway.ReservedHosts.isReservedResolved(config.targetHost)
+                    ) {
+                        _configState.value =
+                            _configState.value.copy(targetHostError = network.libertychat.app.gateway.ReservedHosts.MESSAGE)
+                        return@launch
+                    }
 
                     if (editingId != null) {
                         // Update existing interface
@@ -846,6 +854,28 @@ class InterfaceManagementViewModel
                 }
             }
 
+            // the LCS Global name is reserved for the managed gateway interface, so a
+            // hand-made interface can neither pose as it nor receive its hidden settings.
+            if (isValid && _state.value.editingInterface?.let {
+                    network.libertychat.app.gateway.GatewayConfig.isGateway(it.name)
+                } != true
+            ) {
+                val wanted = config.name.trim()
+                val reserved =
+                    (
+                        network.libertychat.app.gateway.GatewayConfig.FORMER_INTERFACE_NAMES +
+                            network.libertychat.app.gateway.GatewayConfig.INTERFACE_NAME +
+                            network.libertychat.app.gateway.GatewayConfig.PRODUCT_NAME
+                    ).any { it.equals(wanted, ignoreCase = true) }
+                if (reserved) {
+                    _configState.value =
+                        _configState.value.copy(
+                            nameError = "\"$wanted\" is reserved. Add ${network.libertychat.app.gateway.GatewayConfig.PRODUCT_NAME} from the Add Interface menu.",
+                        )
+                    isValid = false
+                }
+            }
+
             // VALIDATION: Check for duplicate interface names
             // RNS config uses section names like [[Interface Name]], so duplicates cause parsing errors
             if (isValid) { // Only check if name is otherwise valid
@@ -885,6 +915,12 @@ class InterfaceManagementViewModel
                                     targetHostError = null,
                                     targetHost = hostResult.value,
                                 )
+                            // the LCS machines are reserved for the managed LCS Global interface.
+                            if (network.libertychat.app.gateway.ReservedHosts.isReserved(hostResult.value)) {
+                                _configState.value =
+                                    _configState.value.copy(targetHostError = network.libertychat.app.gateway.ReservedHosts.MESSAGE)
+                                isValid = false
+                            }
                         }
                     }
 

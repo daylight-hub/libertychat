@@ -58,14 +58,10 @@ class TcpCommunityServersTest {
     }
 
     @Test
-    fun `first server is still the LCS public node`() {
-        // Onboarding's "Internet (TCP)" card takes servers.first(). Adding the
-        // Command Center entry must not change what that card connects to.
-        val first = TcpCommunityServers.servers.first()
-
-        assertEquals("public.lcs.network", first.host)
-        assertEquals(4245, first.port)
-        assertTrue(first.isBootstrap)
+    fun `the LCS Global address is not listed`() {
+        // the gateway is a subscription service; its address comes from the
+        // entitlement server and must never appear in the visible server list.
+        assertTrue(TcpCommunityServers.servers.none { it.host == "public.lcs.network" })
     }
 
     @Test

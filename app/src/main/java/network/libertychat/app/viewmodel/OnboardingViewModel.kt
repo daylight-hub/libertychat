@@ -125,6 +125,15 @@ class OnboardingViewModel
         /**
          * Toggle an interface type selection.
          */
+        /** set (rather than toggle) whether an interface will be set up. */
+        fun setInterfaceSelected(
+            interfaceType: OnboardingInterfaceType,
+            selected: Boolean,
+        ) {
+            val current = _state.value.selectedInterfaces
+            _state.value = _state.value.copy(selectedInterfaces = if (selected) current + interfaceType else current - interfaceType)
+        }
+
         fun toggleInterface(interfaceType: OnboardingInterfaceType) {
             val currentSelection = _state.value.selectedInterfaces.toMutableSet()
             if (currentSelection.contains(interfaceType)) {
@@ -377,7 +386,16 @@ class OnboardingViewModel
             // Process each interface type
             for ((onboardingType, dbType) in typeMapping) {
                 val isSelected = selectedInterfaces.contains(onboardingType)
-                val existingEntity = typeKeyedEntities.find { it.type == dbType }
+                // "TCP" here means LCS Global: match its own row by name, so a TCP
+                // connection the user added themselves is never switched on or off.
+                val existingEntity =
+                    if (onboardingType == OnboardingInterfaceType.TCP) {
+                        typeKeyedEntities.find {
+                            it.type == dbType && network.libertychat.app.gateway.GatewayConfig.isGateway(it.name)
+                        }
+                    } else {
+                        typeKeyedEntities.find { it.type == dbType }
+                    }
 
                 when {
                     // RNode requires wizard setup, don't auto-create or modify
@@ -405,28 +423,11 @@ class OnboardingViewModel
                                         name = "Bluetooth LE",
                                         enabled = true,
                                     )
-                                OnboardingInterfaceType.TCP -> {
-                                    val defaultServer = TcpCommunityServers.servers.firstOrNull()
-                                    if (defaultServer != null) {
-                                        InterfaceConfig.TCPClient(
-                                            name = defaultServer.name,
-                                            enabled = true,
-                                            targetHost = defaultServer.host,
-                                            targetPort = defaultServer.port,
-                                            // LCS: carry the server's bootstrap flag through.
-                                            // Onboarding previously dropped it, so a user who
-                                            // chose TCP here got the LCS gateway as a permanent
-                                            // interface while the same server added through the
-                                            // TCP wizard got bootstrap_only. Since LCS no longer
-                                            // seeds a bootstrap interface, this is now the only
-                                            // way one gets configured during first run.
-                                            bootstrapOnly = defaultServer.isBootstrap,
-                                        )
-                                    } else {
-                                        Log.w(TAG, "No default TCP server available")
-                                        null
-                                    }
-                                }
+                                // "Internet" = LCS Global. Created disabled with a
+                                // placeholder; GatewayAccessManager starts the trial (or finds
+                                // the subscription) and fills in host, port and passphrase.
+                                OnboardingInterfaceType.TCP ->
+                                    network.libertychat.app.gateway.GatewayConfig.placeholderInterface()
                                 OnboardingInterfaceType.RNODE -> null
                                 // LCS: handled after this loop — it shares the
                                 // "TCPClient" db type with TCP, so it cannot be
