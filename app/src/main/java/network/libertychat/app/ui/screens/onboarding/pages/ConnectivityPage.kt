@@ -98,6 +98,7 @@ fun ConnectivityPage(
             isSelected = selectedInterfaces.contains(OnboardingInterfaceType.TCP),
             onClick = { onInterfaceToggle(OnboardingInterfaceType.TCP) },
             icon = network.libertychat.app.gateway.ui.lcsGlobalGlobeIcon(),
+            iconTint = network.libertychat.app.gateway.ui.LCS_GLOBAL_ICON_TINT,
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -199,6 +200,8 @@ private fun InterfaceCard(
     enabled: Boolean = true,
     statusText: String? = null,
     statusIsError: Boolean = false,
+    // null = the usual tint; Color.Unspecified keeps the LCS Global logo in its own colours
+    iconTint: androidx.compose.ui.graphics.Color? = null,
 ) {
     val borderColor by animateColorAsState(
         targetValue =
@@ -252,7 +255,7 @@ private fun InterfaceCard(
                         .padding(horizontal = 12.dp)
                         .size(24.dp),
                 tint =
-                    if (enabled) {
+                    iconTint ?: if (enabled) {
                         MaterialTheme.colorScheme.onSurface
                     } else {
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)

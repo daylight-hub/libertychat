@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
 
 /**
@@ -54,6 +55,8 @@ fun CollapsibleSettingsCard(
     onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     headerAction: (@Composable () -> Unit)? = null,
+    // null = the usual tint; Color.Unspecified keeps a full-colour icon (e.g. a logo) as drawn
+    iconTint: androidx.compose.ui.graphics.Color? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Card(
@@ -91,7 +94,8 @@ fun CollapsibleSettingsCard(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = iconTint ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp),
                     )
                     Text(
                         text = title,

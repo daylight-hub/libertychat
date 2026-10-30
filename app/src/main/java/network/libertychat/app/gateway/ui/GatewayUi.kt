@@ -145,9 +145,14 @@ object GatewaySettingsRequest {
     }
 }
 
-/** The LCS Global globe for menus and settings (one colour, tinted like other icons). */
+/**
+ * The LCS Global logo (navy disc, gold globe) for settings and onboarding. Full colour: show it
+ * with tint = Color.Unspecified ([LCS_GLOBAL_ICON_TINT]) so it isn't flattened to one colour.
+ */
 @Composable
-fun lcsGlobalGlobeIcon(): ImageVector = ImageVector.vectorResource(network.libertychat.app.R.drawable.ic_lcs_global_globe)
+fun lcsGlobalGlobeIcon(): ImageVector = ImageVector.vectorResource(network.libertychat.app.R.drawable.ic_lcs_global)
+
+val LCS_GLOBAL_ICON_TINT = androidx.compose.ui.graphics.Color.Unspecified
 
 // ---------------------------------------------------------------------------- Tor
 
@@ -551,6 +556,7 @@ fun GatewaySettingsCard() {
     CollapsibleSettingsCard(
         title = GatewayConfig.INTERFACE_NAME,
         icon = lcsGlobalGlobeIcon(),
+        iconTint = LCS_GLOBAL_ICON_TINT,
         isExpanded = expanded,
         onExpandedChange = { expanded = it },
         modifier = Modifier.bringIntoViewRequester(bringIntoView),
