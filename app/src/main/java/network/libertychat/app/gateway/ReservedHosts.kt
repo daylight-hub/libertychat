@@ -16,15 +16,16 @@ import java.net.InetAddress
  * passphrase) is what actually keeps non-subscribers out; this keeps the app from being
  * the tool that probes for it, and keeps these names out of the app's interface list.
  *
- * Covers the names themselves, any sub-name of them, and the IP addresses they resolve
- * to (looked up in the background and remembered), so typing the raw IP doesn't help.
+ * Covers lcs.network and every name under it, the IP addresses they resolve to (looked up in
+ * the background and remembered), so typing the raw IP doesn't help, and the gateway's onion
+ * address once the server has sent it.
  */
 object ReservedHosts {
     private const val TAG = "ReservedHosts"
     private const val PREF_IPS = "reserved_ips"
 
     /** Hostnames (and everything ending in ".<name>") that custom interfaces can't use. */
-    val NAMES = listOf("public.lcs.network", "server.lcs.network", "start.lcs.network", "update.lcs.network")
+    val NAMES = listOf("lcs.network", "public.lcs.network", "server.lcs.network", "start.lcs.network", "update.lcs.network")
 
     const val MESSAGE =
         "This server is reserved for ${GatewayConfig.PRODUCT_NAME}. Add ${GatewayConfig.PRODUCT_NAME} " +
@@ -50,6 +51,7 @@ object ReservedHosts {
         val h = normalise(host)
         if (h.isEmpty()) return false
         if (NAMES.any { h == it || h.endsWith(".$it") }) return true
+        GatewaySecrets.get()?.host?.let { live -> if (h == normalise(live)) return true }
         return h in knownIps || canonicalIp(h)?.let { it in knownIps } == true
     }
 

@@ -1780,6 +1780,12 @@ fun ColumbaNavigation(
                                     onNavigateToDiscoveredInterfaces = {
                                         navController.navigate("discovered_interfaces")
                                     },
+                                    onNavigateToGatewaySettings = {
+                                        // Usually reached from Settings: go back to it; otherwise open it.
+                                        if (!navController.popBackStack(Screen.Settings.route, inclusive = false)) {
+                                            navController.navigate(Screen.Settings.route) { launchSingleTop = true }
+                                        }
+                                    },
                                 )
                             }
 

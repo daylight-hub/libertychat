@@ -57,6 +57,7 @@ class GatewayAccessManager
             private const val TAG = "GatewayAccess"
             private const val PREF_AUTO_TRIAL = "auto_trial"
             private const val PREF_PLANS = "plans_json"
+            private const val PREF_USE_TOR = "use_tor"
         }
 
         /** Gateway access found on the identity the user just switched away from. */
@@ -80,6 +81,11 @@ class GatewayAccessManager
         private val kicks = Channel<Unit>(Channel.CONFLATED)
         private val _state = MutableStateFlow(UiState())
         val state: StateFlow<UiState> = _state.asStateFlow()
+
+        private val _useTor = MutableStateFlow(prefs.getBoolean(PREF_USE_TOR, false))
+
+        /** "Connect through Tor (Orbot)" for LCS Global. */
+        val useTor: StateFlow<Boolean> = _useTor.asStateFlow()
 
         @Volatile
         private var started = false
@@ -206,7 +212,11 @@ class GatewayAccessManager
         }
 
         private suspend fun openSession(entity: InterfaceEntity): GatewayApi.Result =
-            api.call("/v1/gateway/session", "session", socksFor(entity)).also { r ->
+            api.call("/v1/gateway/session", "session", socksFor(entity)) { _, _, _ ->
+                // Over Tor the server answers with its onion address (if it has one) instead
+                // of opening its firewall for a Tor exit's address.
+                if (_useTor.value) mapOf("via" to "tor") else emptyMap()
+            }.also { r ->
                 val json = (r as? GatewayApi.Result.Ok)?.json ?: (r as? GatewayApi.Result.Refused)?.json
                 if (json != null && json.has("state")) _state.update { it.copy(status = GatewayStatus.from(json)) }
             }
@@ -244,12 +254,46 @@ class GatewayAccessManager
         private suspend fun gatewayEntity(): InterfaceEntity? =
             interfaceRepository.allInterfaceEntities.first().firstOrNull { isGatewayEntity(it) }
 
-        private fun socksFor(entity: InterfaceEntity?): InetSocketAddress? {
-            val config = entity?.let { runCatching { interfaceRepository.entityToConfig(it) }.getOrNull() }
-            return (config as? InterfaceConfig.TCPClient)
-                ?.takeIf { it.socksProxyEnabled }
-                ?.let { InetSocketAddress.createUnresolved(it.socksProxyHost, it.socksProxyPort) }
+        /** Requests go the same way as the gateway connection: through Orbot when Tor is on. */
+        @Suppress("UNUSED_PARAMETER")
+        private fun socksFor(entity: InterfaceEntity?): InetSocketAddress? =
+            if (_useTor.value) {
+                InetSocketAddress.createUnresolved(GatewayConfig.TOR_SOCKS_HOST, GatewayConfig.TOR_SOCKS_PORT)
+            } else {
+                null
+            }
+
+        /**
+         * Turn Tor on or off for LCS Global. The stored session is dropped so the next one
+         * matches (over Tor the server may hand out its onion address instead of the host).
+         */
+        suspend fun setUseTor(enabled: Boolean) {
+            if (_useTor.value == enabled) return
+            _useTor.value = enabled
+            prefs.edit().putBoolean(PREF_USE_TOR, enabled).apply()
+            val entity = gatewayEntity()
+            if (entity != null) {
+                val current = runCatching { interfaceRepository.entityToConfig(entity) }.getOrNull() as? InterfaceConfig.TCPClient
+                val stored =
+                    (current ?: GatewayConfig.placeholderInterface()).copy(
+                        targetHost = GatewayConfig.PLACEHOLDER_HOST,
+                        targetPort = GatewayConfig.PLACEHOLDER_PORT,
+                        networkName = null,
+                        passphrase = null,
+                        bootstrapOnly = false,
+                        socksProxyEnabled = enabled,
+                        socksProxyHost = GatewayConfig.TOR_SOCKS_HOST,
+                        socksProxyPort = GatewayConfig.TOR_SOCKS_PORT,
+                    )
+                interfaceRepository.updateInterfaceEntity(entity.copy(configJson = stored.toJsonString()))
+            }
+            GatewaySecrets.put(null)
+            kick(force = true)
         }
+
+        /** Is Orbot installed on this phone? */
+        fun isOrbotInstalled(): Boolean =
+            runCatching { context.packageManager.getPackageInfo(GatewayConfig.ORBOT_PACKAGE, 0) }.isSuccess
 
         private suspend fun applySession(
             entity: InterfaceEntity,
@@ -267,6 +311,9 @@ class GatewayAccessManager
                     networkName = null,
                     passphrase = null,
                     bootstrapOnly = false,
+                    socksProxyEnabled = _useTor.value,
+                    socksProxyHost = GatewayConfig.TOR_SOCKS_HOST,
+                    socksProxyPort = GatewayConfig.TOR_SOCKS_PORT,
                 ).toJsonString()
             val rowChanged = !entity.enabled || entity.configJson != stored || entity.name != GatewayConfig.INTERFACE_NAME
             if (GatewaySecrets.get() == live && !rowChanged) return // firewall renewed; nothing to reconfigure
@@ -330,7 +377,7 @@ class GatewayAccessManager
         /** Create the gateway interface if it doesn't exist yet. */
         suspend fun ensureGatewayInterface() {
             if (gatewayEntity() == null) {
-                interfaceRepository.insertInterface(GatewayConfig.placeholderInterface())
+                interfaceRepository.insertInterface(GatewayConfig.placeholderInterface(useTor = _useTor.value))
             }
         }
 

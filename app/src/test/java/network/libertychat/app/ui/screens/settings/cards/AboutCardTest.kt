@@ -191,9 +191,9 @@ class AboutCardTest {
     }
 
     @Test
-    fun `view release handles missing external activity without crashing`() {
+    fun `download update handles missing external activity without crashing`() {
         assertMissingExternalActivityHandled(
-            buttonText = "View Release",
+            buttonText = "Download update",
             updateCheckResult =
                 AppUpdateResult.UpdateAvailable(
                     currentVersion = "3.0.7",

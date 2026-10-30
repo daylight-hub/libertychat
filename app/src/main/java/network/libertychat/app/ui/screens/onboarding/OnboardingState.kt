@@ -54,11 +54,11 @@ enum class OnboardingInterfaceType(
         description = "Connect to a Command Center over your network",
         secondaryDescription = "liberty.local:4246 · Use if Local WiFi can't find it",
     ),
-    // the internet option is LCS Global subscription (7-day free trial).
+    // the internet option is LCS Global subscription (7-day free trial). Listed first on the
+    // connectivity page; its own page follows either way.
     TCP(
-        displayName = "${network.libertychat.app.gateway.GatewayConfig.PRODUCT_NAME} (Internet)",
-        description = "Reach the Liberty network from anywhere",
-        secondaryDescription = "Free 7-day trial, then a paid plan",
+        displayName = network.libertychat.app.gateway.GatewayConfig.PRODUCT_NAME,
+        description = "Connect over Wi-Fi or Mobile Data - Free ${network.libertychat.app.gateway.GatewayConfig.TRIAL_DAYS}-day trial",
     ),
     RNODE(
         displayName = "LoRa Radio",

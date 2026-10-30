@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -284,24 +285,33 @@ fun AboutCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    is AppUpdateResult.UpdateAvailable ->
+                    is AppUpdateResult.UpdateAvailable -> {
+                        Text(
+                            text = "Update available: ${result.tagName}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Text(
-                                text = "Update available: ${result.tagName}",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            TextButton(
+                            // Downloads the same APK as the one installed (falls back to the release page).
+                            Button(
                                 onClick = {
-                                    openExternalUrl(context, result.htmlUrl)
+                                    openExternalUrl(context, result.apkUrl ?: result.htmlUrl)
                                 },
                             ) {
-                                Text("View Release")
+                                Text("Download update")
+                            }
+                            TextButton(
+                                onClick = {
+                                    openExternalUrl(context, network.libertychat.app.service.UpdateChecker.ALL_APPS_URL)
+                                },
+                            ) {
+                                Text("All Apps")
                             }
                         }
+                    }
                     is AppUpdateResult.Error ->
                         Text(
                             text = result.message,

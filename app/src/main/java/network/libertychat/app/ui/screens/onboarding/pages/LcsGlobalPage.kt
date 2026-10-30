@@ -52,6 +52,8 @@ import network.libertychat.app.gateway.ui.rememberGatewayAccessManager
  *
  * [selected] = LCS Global will be set up when onboarding completes (the interface is
  * created then, and the free trial starts by itself unless a plan or code was chosen).
+ * Ticked on the connectivity page, it means the user must pick the trial, a plan or a code
+ * here before continuing (or tap "Not now"). Shown whether or not it was ticked.
  */
 @Composable
 fun LcsGlobalPage(
@@ -68,6 +70,9 @@ fun LcsGlobalPage(
     val scope = rememberCoroutineScope()
     var showPlans by remember { mutableStateOf(false) }
     var showAlready by remember { mutableStateOf(false) }
+    // "trial", "plan" or "code" once the user has decided; null until then.
+    var choice by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    var needChoice by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { manager?.refreshPlans() }
 
@@ -120,9 +125,20 @@ fun LcsGlobalPage(
         }
         Spacer(modifier = Modifier.height(24.dp))
 
+        if (selected && choice == null) {
+            Text(
+                "You picked ${GatewayConfig.PRODUCT_NAME}. Start the free trial or choose a plan to finish setting it up.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (needChoice) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
         Button(
             onClick = {
                 manager?.setAutoTrial(true)
+                choice = "trial"
                 onSelectedChange(true)
                 onContinue()
             },
@@ -138,18 +154,23 @@ fun LcsGlobalPage(
         }
         TextButton(
             onClick = {
+                choice = null
+                needChoice = false
                 onSelectedChange(false)
                 onContinue()
             },
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Not now (add it later from Settings)") }
-        if (selected) {
+        if (selected && choice != null) {
             Text(
                 "${GatewayConfig.PRODUCT_NAME} will be set up when you finish.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
             )
         }
+        Spacer(modifier = Modifier.height(16.dp))
+        // Tor can be chosen now; it applies as soon as the connection is set up.
+        network.libertychat.app.gateway.ui.TorOption()
 
         Spacer(modifier = Modifier.weight(1f))
         Spacer(modifier = Modifier.height(16.dp))
@@ -160,7 +181,10 @@ fun LcsGlobalPage(
                 shape = RoundedCornerShape(12.dp),
             ) { Text("Back") }
             Button(
-                onClick = onContinue,
+                onClick = {
+                    // Ticked on the previous page: the trial or a plan has to be chosen first.
+                    if (selected && choice == null) needChoice = true else onContinue()
+                },
                 modifier = Modifier.weight(1f).height(56.dp),
                 shape = RoundedCornerShape(12.dp),
             ) { Text("Continue") }
@@ -184,6 +208,7 @@ fun LcsGlobalPage(
                     PlanButtons(plans, enabled = true) { plan ->
                         scope.launch {
                             if (manager.openSubscribe(context, plan)) {
+                                choice = "plan"
                                 onSelectedChange(true)
                                 showPlans = false
                             }
@@ -205,6 +230,7 @@ fun LcsGlobalPage(
             onDismiss = { showAlready = false },
             onDone = {
                 showAlready = false
+                choice = "code"
                 onSelectedChange(true)
             },
         )

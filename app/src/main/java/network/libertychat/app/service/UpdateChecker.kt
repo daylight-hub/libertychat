@@ -1,7 +1,11 @@
 package network.libertychat.app.service
 
+import android.content.Context
 import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
 import network.libertychat.app.BuildConfig
+import org.json.JSONObject
+import java.util.zip.ZipFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -24,6 +28,8 @@ sealed class AppUpdateResult {
         val tagName: String,
         val htmlUrl: String,
         val isPrerelease: Boolean,
+        /** Direct download of the same APK as the one installed (same ABI or universal), if found. */
+        val apkUrl: String? = null,
     ) : AppUpdateResult()
 
     data class Error(
@@ -34,12 +40,17 @@ sealed class AppUpdateResult {
 @Singleton
 class UpdateChecker
     @Inject
-    constructor() {
+    constructor(
+        @ApplicationContext private val context: Context,
+    ) {
         companion object {
             private const val TAG = "UpdateChecker"
             private const val OWNER = "daylight-hub"
             private const val REPO = "libertychat"
             private const val TIMEOUT_MS = 10_000
+
+            /** Every Liberty Communication Systems app, for the "All apps" link. */
+            const val ALL_APPS_URL = "https://lcs.network/#download-the-app"
         }
 
         suspend fun check(includePrerelease: Boolean): AppUpdateResult =
@@ -81,6 +92,7 @@ class UpdateChecker
                             tagName = tagName,
                             htmlUrl = htmlUrl,
                             isPrerelease = isPrerelease,
+                            apkUrl = runCatching { matchingApkUrl(releaseJson) }.getOrNull(),
                         )
                     } else {
                         AppUpdateResult.UpToDate(currentVersion = formatVersionTriple(currentVersion))
@@ -90,6 +102,43 @@ class UpdateChecker
                     AppUpdateResult.Error(e.message ?: "Network error")
                 }
             }
+
+        /**
+         * The release's APK for this install: arm64-v8a, armeabi-v7a, x86_64 or universal, the
+         * same one the phone has now. Assets are named like libertychat-2.3.0-official-rns-py-arm64-v8a.apk.
+         */
+        private fun matchingApkUrl(releaseJson: String): String? {
+            val assets = JSONObject(releaseJson).optJSONArray("assets") ?: return null
+            val apks =
+                (0 until assets.length())
+                    .map { assets.getJSONObject(it) }
+                    .map { it.optString("name") to it.optString("browser_download_url") }
+                    .filter { (name, url) -> name.endsWith(".apk") && url.startsWith("https://") && !name.contains("debug") }
+            val backend = if (BuildConfig.RNS_IMPL == "kotlin") "rns-kt" else "rns-py"
+            val sameBackend = apks.filter { (name, _) -> name.contains(backend) }.ifEmpty { apks }
+            val variant = installedVariant()
+            return (
+                sameBackend.firstOrNull { (name, _) -> name.endsWith("-$variant.apk") }
+                    ?: sameBackend.firstOrNull { (name, _) -> name.endsWith("-universal.apk") }
+                )?.second
+        }
+
+        /** Which of the four APKs is installed: one ABI's libraries, or several (universal). */
+        private fun installedVariant(): String {
+            val info = context.applicationInfo
+            val abis = mutableSetOf<String>()
+            (listOf(info.sourceDir) + info.splitSourceDirs.orEmpty()).forEach { path ->
+                runCatching {
+                    ZipFile(path).use { zip ->
+                        zip.entries().asSequence()
+                            .map { it.name }
+                            .filter { it.startsWith("lib/") && it.count { c -> c == '/' } >= 2 }
+                            .forEach { abis += it.removePrefix("lib/").substringBefore('/') }
+                    }
+                }
+            }
+            return if (abis.size == 1) abis.first() else "universal"
+        }
 
         private fun fetchJson(apiUrl: String): String {
             val connection = URL(apiUrl).openConnection() as HttpURLConnection

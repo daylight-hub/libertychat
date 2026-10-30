@@ -92,6 +92,11 @@
     <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
     <uses-permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE" />
 
+    <!-- LCS Global: check whether Orbot (Tor) is installed, to offer "Open Orbot" or "Get Orbot". -->
+    <queries>
+        <package android:name="org.torproject.android" />
+    </queries>
+
     <application
         android:name=".ColumbaApplication"
         android:enableOnBackInvokedCallback="true"

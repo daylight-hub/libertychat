@@ -126,6 +126,9 @@ class GatewaySigner
                     .put("dev", deviceHash())
                     .put("ts", ts)
                     .put("nonce", nonce)
+                    // Which app is asking (shown in the LCS Global console).
+                    .put("client", "libertychat")
+                    .put("client_version", network.libertychat.app.BuildConfig.VERSION_NAME)
             extra?.invoke(ts, nonce)?.forEach { (k, v) -> json.put(k, v) }
             val body = json.toString().toByteArray(Charsets.UTF_8)
             return Signed(body, Base64.encodeToString(ed25519(keys.signingSeed, body), Base64.NO_WRAP))

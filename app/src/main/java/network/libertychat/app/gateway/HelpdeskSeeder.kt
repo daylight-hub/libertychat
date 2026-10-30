@@ -33,8 +33,12 @@ class HelpdeskSeeder
     ) {
         companion object {
             private const val TAG = "HelpdeskSeeder"
-            private const val PREF_SEEDED = "helpdesk_seeded_identities"
-            const val HELPDESK_ADDRESS = "199f2de1b645dc0289fbe7058cbe2a50"
+            // v2: the helpdesk address changed, so every identity is seeded again once.
+            private const val PREF_SEEDED = "helpdesk_seeded_identities_v2"
+            const val HELPDESK_ADDRESS = "225b1cc4c4a1d9fdf2db6dea26c33f82"
+
+            /** The address earlier releases saved by mistake. Removed where it is still unused. */
+            private const val FORMER_HELPDESK_ADDRESS = "199f2de1b645dc0289fbe7058cbe2a50"
             const val HELPDESK_NAME = "LCS Helpdesk"
             private val WELCOME =
                 "Welcome to Liberty Chat! This is the LCS Helpdesk. Message us here any time with " +
@@ -57,6 +61,15 @@ class HelpdeskSeeder
         private suspend fun seed(identityHash: String) {
             val done = prefs.getStringSet(PREF_SEEDED, emptySet()).orEmpty()
             if (identityHash in done) return
+
+            // Replace the wrong helpdesk address from earlier releases. Its conversation goes
+            // too, unless the user wrote something in it.
+            if (contactRepository.hasContact(FORMER_HELPDESK_ADDRESS)) {
+                contactRepository.deleteContact(FORMER_HELPDESK_ADDRESS)
+            }
+            conversationRepository.getConversation(FORMER_HELPDESK_ADDRESS)?.let { old ->
+                if (old.lastMessage == WELCOME) conversationRepository.deleteConversation(FORMER_HELPDESK_ADDRESS)
+            }
 
             if (!contactRepository.hasContact(HELPDESK_ADDRESS)) {
                 contactRepository.addPendingContact(HELPDESK_ADDRESS, HELPDESK_NAME).getOrThrow()

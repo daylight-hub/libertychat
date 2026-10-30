@@ -91,7 +91,17 @@ fun ConnectivityPage(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Interface options
+        // Interface options. LCS Global first: if it's ticked, the next page asks for the free
+        // trial or a plan; if not, the next page still explains it.
+        InterfaceCard(
+            interfaceType = OnboardingInterfaceType.TCP,
+            isSelected = selectedInterfaces.contains(OnboardingInterfaceType.TCP),
+            onClick = { onInterfaceToggle(OnboardingInterfaceType.TCP) },
+            icon = network.libertychat.app.gateway.ui.lcsGlobalGlobeIcon(),
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
         InterfaceCard(
             interfaceType = OnboardingInterfaceType.AUTO,
             isSelected = selectedInterfaces.contains(OnboardingInterfaceType.AUTO),
@@ -127,8 +137,6 @@ fun ConnectivityPage(
         )
 
         Spacer(modifier = Modifier.height(12.dp))
-
-        // LCS Global (internet) has its own onboarding page right after this one.
 
         InterfaceCard(
             interfaceType = OnboardingInterfaceType.RNODE,

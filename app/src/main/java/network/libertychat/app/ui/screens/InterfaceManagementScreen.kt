@@ -115,6 +115,8 @@ fun InterfaceManagementScreen(
     onNavigateToTcpClientWizard: (interfaceId: Long?) -> Unit = {},
     onNavigateToInterfaceStats: (interfaceId: Long) -> Unit = {},
     onNavigateToDiscoveredInterfaces: () -> Unit = {},
+    // Edit on LCS Global opens Settings > LCS Global.
+    onNavigateToGatewaySettings: () -> Unit = {},
     viewModel: InterfaceManagementViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -393,13 +395,10 @@ fun InterfaceManagementScreen(
                                                     "RNode" -> onNavigateToRNodeWizard(iface.id)
                                                     "TCPClient" ->
                                                         if (network.libertychat.app.gateway.GatewayConfig.isGateway(iface.name)) {
-                                                            // managed by the subscription; nothing to edit by hand.
-                                                            android.widget.Toast
-                                                                .makeText(
-                                                                    context,
-                                                                    "The ${network.libertychat.app.gateway.GatewayConfig.PRODUCT_NAME} is set up automatically. See Settings > ${network.libertychat.app.gateway.GatewayConfig.PRODUCT_NAME}.",
-                                                                    android.widget.Toast.LENGTH_LONG,
-                                                                ).show()
+                                                            // managed by the subscription: its settings live in
+                                                            // Settings > LCS Global (plan, Tor, redeem, move).
+                                                            network.libertychat.app.gateway.ui.GatewaySettingsRequest.request()
+                                                            onNavigateToGatewaySettings()
                                                         } else {
                                                             onNavigateToTcpClientWizard(iface.id)
                                                         }
@@ -1448,7 +1447,7 @@ fun InterfaceTypeSelector(
                 // port and passphrase come from the server and are never shown or editable.
                 InterfaceTypeOption(
                     title = network.libertychat.app.gateway.GatewayConfig.PRODUCT_NAME,
-                    description = "Reach the Liberty network from anywhere. Free ${network.libertychat.app.gateway.GatewayConfig.TRIAL_DAYS}-day trial",
+                    description = "Connect over Wi-Fi or Mobile Data - Free ${network.libertychat.app.gateway.GatewayConfig.TRIAL_DAYS}-day trial",
                     onClick = { onTypeSelected(network.libertychat.app.gateway.GatewayConfig.MENU_TYPE) },
                 )
                 InterfaceTypeOption(

@@ -30,6 +30,8 @@ data class GatewayStatus(
     val line: Int? = null,
     /** Cancelled on lcs.network: no more charges; access runs to [paidThrough], then ends. */
     val cancelled: Boolean = false,
+    /** Set by LCS in the console: this line never runs out (e.g. a Command Center). */
+    val unlimited: Boolean = false,
 ) {
     companion object {
         fun from(json: JSONObject) =
@@ -47,6 +49,7 @@ data class GatewayStatus(
                 lines = if (json.has("lines") && !json.isNull("lines")) json.optInt("lines") else null,
                 line = if (json.has("line") && !json.isNull("line")) json.optInt("line") else null,
                 cancelled = json.optBoolean("cancelled", false),
+                unlimited = json.optBoolean("unlimited", false),
             )
     }
 }

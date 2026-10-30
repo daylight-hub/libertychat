@@ -9,6 +9,14 @@ upstream; upstream's own history is not repeated here.
 
 ---
 
+## 2.3.4
+
+### Changed
+
+- Onboarding and connection settings improvements.
+- Update downloads and support contact updates.
+- Stability fixes.
+
 ## 2.3.3
 
 ### Changed

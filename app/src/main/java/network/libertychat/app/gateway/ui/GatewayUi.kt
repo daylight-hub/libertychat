@@ -7,8 +7,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.material3.Switch
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -42,6 +47,10 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import network.libertychat.app.gateway.GatewayAccessManager
 import network.libertychat.app.gateway.GatewayConfig
@@ -85,6 +94,9 @@ fun describe(status: GatewayStatus?): String {
         "trial" -> "Free trial: ${daysLeft(status.trialEnds)} day(s) left, until ${formatDate(status.trialEnds)}."
         "trial_ended" -> "Your free trial has ended."
         "active" -> {
+            if (status.unlimited) {
+                return status.plan?.let { "Active ($it). No time limit." } ?: "Active. No time limit."
+            }
             val plan =
                 status.plan?.let { p -> if ((status.lines ?: 1) > 1 && status.line != null) "$p, line ${status.line}" else p }
             val prefix = if (plan != null) "Active ($plan)." else "Active."
@@ -113,6 +125,118 @@ val IDENTITY_WARNING =
     "Your ${GatewayConfig.PRODUCT_NAME} trial and subscription belong to this identity. Before deleting it, switch to " +
         "the identity you'll keep and choose \"Move from another identity\" in Settings > ${GatewayConfig.PRODUCT_NAME} " +
         "(or change it later in My Account at lcs.network, 3 times a year). A free trial can't be restarted."
+
+// ---------------------------------------------------------------------------- navigation
+
+/**
+ * "Edit" on the LCS Global interface opens Settings > LCS Global: the Interfaces screen asks
+ * here, and the Settings card opens itself and scrolls into view.
+ */
+object GatewaySettingsRequest {
+    private val _pending = MutableStateFlow(false)
+    val pending: StateFlow<Boolean> = _pending.asStateFlow()
+
+    fun request() {
+        _pending.value = true
+    }
+
+    fun consume() {
+        _pending.value = false
+    }
+}
+
+/** The LCS Global globe for menus and settings (one colour, tinted like other icons). */
+@Composable
+fun lcsGlobalGlobeIcon(): ImageVector = ImageVector.vectorResource(network.libertychat.app.R.drawable.ic_lcs_global_globe)
+
+// ---------------------------------------------------------------------------- Tor
+
+private fun openExternal(
+    context: Context,
+    url: String,
+) {
+    try {
+        context.startActivity(
+            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    } catch (e: android.content.ActivityNotFoundException) {
+        android.widget.Toast.makeText(context, "No web browser found.", android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
+/** Short steps for setting up Tor, shown under the switch. */
+val TOR_STEPS =
+    "1. Install Orbot (Get Orbot below, or from Google Play or F-Droid).\n" +
+        "2. Open Orbot and tap Connect. Wait until it says Connected.\n" +
+        "3. Come back here and turn on Connect through Tor.\n" +
+        "4. Leave Orbot running. If ${GatewayConfig.PRODUCT_NAME} stops connecting, open Orbot and make sure it's still connected.\n" +
+        "Leave Orbot's settings as they are (it listens on port 9050). Messages and calls can be a little slower over Tor."
+
+/**
+ * "Connect through Tor (Orbot)" for LCS Global. The address, port and passphrase still come
+ * from the server and are never shown; this only says which way the connection goes.
+ */
+@Composable
+fun TorOption(modifier: Modifier = Modifier) {
+    val manager = rememberGatewayAccessManager() ?: return
+    val useTor by manager.useTor.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var orbotInstalled by remember { mutableStateOf(manager.isOrbotInstalled()) }
+    var showSteps by rememberSaveable { mutableStateOf(false) }
+
+    // Back from installing Orbot: check again.
+    DisposableEffect(lifecycleOwner) {
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) orbotInstalled = manager.isOrbotInstalled()
+            }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Connect through Tor (Orbot)", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Hides your internet address from LCS and from your network. Needs the free Orbot app " +
+                        "installed and connected.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = useTor, onCheckedChange = { on -> scope.launch { manager.setUseTor(on) } })
+        }
+        if (useTor && !orbotInstalled) {
+            Text(
+                "Orbot isn't installed yet. ${GatewayConfig.PRODUCT_NAME} won't connect until it is installed and connected.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (orbotInstalled) {
+                TextButton(onClick = {
+                    context.packageManager.getLaunchIntentForPackage(GatewayConfig.ORBOT_PACKAGE)?.let {
+                        context.startActivity(it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }) { Text("Open Orbot") }
+            } else {
+                TextButton(onClick = { openExternal(context, GatewayConfig.ORBOT_DOWNLOAD_URL) }) { Text("Get Orbot") }
+            }
+            TextButton(onClick = { openExternal(context, GatewayConfig.ORBOT_RELEASES_URL) }) { Text("Orbot on GitHub") }
+        }
+        TextButton(onClick = { showSteps = !showSteps }) {
+            Text(if (showSteps) "Hide Tor setup steps" else "How to set up Tor")
+        }
+        if (showSteps) {
+            Text(TOR_STEPS, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------- shared pieces
 
@@ -324,6 +448,7 @@ fun GatewayOfferDialog(
                     enabled = !ui.busy,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("I already subscribe / have a code") }
+                TorOption()
                 Text(
                     "Payment happens securely on lcs.network, not in this app. " + CANCEL_TERMS + " " + IDENTITY_WARNING,
                     style = MaterialTheme.typography.bodySmall,
@@ -382,6 +507,7 @@ fun GatewayAlreadyAddedDialog(onDismiss: () -> Unit) {
                 OutlinedButton(onClick = { showAlready = true }, modifier = Modifier.fillMaxWidth()) {
                     Text("Redeem a code")
                 }
+                TorOption()
                 Text(
                     "There is one ${GatewayConfig.PRODUCT_NAME} connection per phone, managed in " +
                         "Settings > ${GatewayConfig.PRODUCT_NAME}. The free trial is once per identity and per phone.",
@@ -408,14 +534,26 @@ fun GatewaySettingsCard() {
     var showAlready by remember { mutableStateOf(false) }
     var showMove by remember { mutableStateOf(false) }
     val state = ui.status?.state
+    val openRequested by GatewaySettingsRequest.pending.collectAsState()
+    val bringIntoView = remember { BringIntoViewRequester() }
 
     LaunchedEffect(expanded) { if (expanded) manager.refreshStatus() }
+    // Edit on the LCS Global interface: open this card and scroll to it.
+    LaunchedEffect(openRequested) {
+        if (openRequested) {
+            GatewaySettingsRequest.consume()
+            expanded = true
+            delay(250)
+            bringIntoView.bringIntoView()
+        }
+    }
 
     CollapsibleSettingsCard(
         title = GatewayConfig.INTERFACE_NAME,
-        icon = Icons.Default.Cloud,
+        icon = lcsGlobalGlobeIcon(),
         isExpanded = expanded,
         onExpandedChange = { expanded = it },
+        modifier = Modifier.bringIntoViewRequester(bringIntoView),
     ) {
         Text(describe(ui.status), style = MaterialTheme.typography.bodyMedium)
         LxmfAddressRow(ui.status?.lxmfAddress)
@@ -439,6 +577,7 @@ fun GatewaySettingsCard() {
             Text("Link this device on lcs.network")
         }
         TextButton(onClick = { manager.kick(force = true) }) { Text("Check again") }
+        TorOption()
         ui.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         Text(CANCEL_TERMS, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(IDENTITY_WARNING, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

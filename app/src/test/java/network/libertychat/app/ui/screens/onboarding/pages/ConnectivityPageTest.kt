@@ -482,6 +482,7 @@ class ConnectivityPageTest {
         }
 
         // Then - only the three selected types are checked
+        composeTestRule.onAllNodes(isToggleable())[CARD_LCS_GLOBAL].assertIsOn()
         composeTestRule.onAllNodes(isToggleable())[CARD_AUTO].assertIsOn()
         composeTestRule.onAllNodes(isToggleable())[CARD_BLE].assertIsOn()
         composeTestRule.onAllNodes(isToggleable())[CARD_COMMAND_CENTER].assertIsOff()
@@ -489,8 +490,7 @@ class ConnectivityPageTest {
     }
 
     @Test
-    fun interfaceOptions_lcsGlobalIsNotOnThisPage() {
-        // LCS Global moved to its own onboarding page.
+    fun interfaceOptions_lcsGlobalIsListedFirst() {
         composeTestRule.setContent {
             ConnectivityPage(
                 selectedInterfaces = emptySet(),
@@ -501,7 +501,9 @@ class ConnectivityPageTest {
                 onContinue = {},
             )
         }
-        assertEquals(4, composeTestRule.onAllNodes(isToggleable()).fetchSemanticsNodes().size)
+        assertEquals(5, composeTestRule.onAllNodes(isToggleable()).fetchSemanticsNodes().size)
+        composeTestRule.onNodeWithText(OnboardingInterfaceType.TCP.displayName).assertIsDisplayed()
+        composeTestRule.onNodeWithText(OnboardingInterfaceType.TCP.description).assertIsDisplayed()
     }
 
     // ========== Navigation Button Tests ==========
@@ -805,8 +807,9 @@ class ConnectivityPageTest {
  * readable and makes an inserted card a one-line change here rather than a
  * renumbering exercise across the file.
  */
-private const val CARD_AUTO = 0
-private const val CARD_BLE = 1
-private const val CARD_COMMAND_CENTER = 2
-// no TCP card here any more; LCS Global has its own onboarding page.
-private const val CARD_RNODE = 3
+// LCS Global is listed first (it also has its own onboarding page next).
+private const val CARD_LCS_GLOBAL = 0
+private const val CARD_AUTO = 1
+private const val CARD_BLE = 2
+private const val CARD_COMMAND_CENTER = 3
+private const val CARD_RNODE = 4

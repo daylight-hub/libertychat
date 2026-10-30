@@ -61,17 +61,32 @@ object GatewayConfig {
     internal const val MIN_INTERVAL_MS = 5 * 60 * 1000L
     internal const val MIN_KICK_GAP_MS = 30 * 1000L
 
+    /**
+     * Tor: LCS Global can be reached through Orbot's SOCKS proxy. When the server has an onion
+     * address, a Tor session gets it (sent only to subscribers, like the host and passphrase), so
+     * the connection never leaves the Tor network. Without one it goes out through a Tor exit.
+     */
+    const val ORBOT_PACKAGE = "org.torproject.android"
+    const val ORBOT_DOWNLOAD_URL = "https://orbot.app/en/download/"
+    const val ORBOT_RELEASES_URL = "https://github.com/guardianproject/orbot-android/releases"
+    const val TOR_SOCKS_HOST = "127.0.0.1"
+    const val TOR_SOCKS_PORT = 9050
+
     fun isGateway(interfaceName: String?): Boolean =
         interfaceName == INTERFACE_NAME || interfaceName in FORMER_INTERFACE_NAMES
 
     /** The interface onboarding / Add Interface create; disabled until a session fills it in. */
-    fun placeholderInterface(): InterfaceConfig.TCPClient =
+    fun placeholderInterface(useTor: Boolean = false): InterfaceConfig.TCPClient =
         InterfaceConfig.TCPClient(
             name = INTERFACE_NAME,
             enabled = false,
             targetHost = PLACEHOLDER_HOST,
             targetPort = PLACEHOLDER_PORT,
             mode = "full",
+            // Never a bootstrap-only connection, and not offered as a choice.
             bootstrapOnly = false,
+            socksProxyEnabled = useTor,
+            socksProxyHost = TOR_SOCKS_HOST,
+            socksProxyPort = TOR_SOCKS_PORT,
         )
 }
