@@ -243,6 +243,41 @@ fun TorOption(modifier: Modifier = Modifier) {
     }
 }
 
+// ---------------------------------------------------------------------------- encryption, data
+
+/** Said on every plan, in the app and on lcs.network. */
+const val UNLIMITED_DATA = "Unlimited data on every plan."
+
+/** How the encryption works, in the same words as LCS MeshChat (Reticulum's own scheme). */
+val ENCRYPTION_DETAILS =
+    listOf(
+        "Liberty Chat runs on Reticulum. Every message, call and file is encrypted on this phone for the one " +
+            "person it's going to, before it leaves: X25519 elliptic-curve key exchange, Ed25519 signatures, and " +
+            "AES-256 encryption (CBC mode) authenticated with HMAC-SHA256.",
+        "Calls and file transfers run over Reticulum links, which make fresh keys for every session, so a key " +
+            "taken later can't unlock what was sent before (forward secrecy). Your private key never leaves this phone.",
+        "${GatewayConfig.PRODUCT_NAME} only carries the encrypted packets between you and the rest of the network. " +
+            "It can't read them, and it doesn't need your name, phone number or email.",
+    )
+
+/** "How the encryption works", folded until tapped. */
+@Composable
+fun EncryptionDetails(modifier: Modifier = Modifier) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    Column(modifier = modifier.fillMaxWidth()) {
+        TextButton(onClick = { open = !open }) {
+            Text(if (open) "Hide how the encryption works" else "How the encryption works")
+        }
+        if (open) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                ENCRYPTION_DETAILS.forEach {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------- shared pieces
 
 /** "Your LXMF address" with a copy button: what to paste on lcs.network when buying there. */
@@ -383,6 +418,7 @@ fun PlanButtons(
     enabled: Boolean,
     onPick: (String) -> Unit,
 ) {
+    Text(UNLIMITED_DATA, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
     plans.forEach { plan ->
         OutlinedButton(onClick = { onPick(plan.plan) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
             Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
@@ -433,9 +469,9 @@ fun GatewayOfferDialog(
                 modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
             ) {
                 Text(
-                    "Reach the Liberty network over the internet from anywhere. " +
-                        "Try it free for ${GatewayConfig.TRIAL_DAYS} days, then ${fromPrice(plans)}. " +
-                        "Family plans cover several people.",
+                    "Reach the Liberty network over the internet from anywhere, with end-to-end encrypted messages, " +
+                        "calls, pictures and files. Try it free for ${GatewayConfig.TRIAL_DAYS} days, then ${fromPrice(plans)}. " +
+                        "Family plans cover several people. $UNLIMITED_DATA",
                 )
                 if (ui.busy) CircularProgressIndicator(modifier = Modifier.padding(4.dp))
                 if (trialAvailable) {
@@ -453,6 +489,7 @@ fun GatewayOfferDialog(
                     enabled = !ui.busy,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("I already subscribe / have a code") }
+                EncryptionDetails()
                 TorOption()
                 Text(
                     "Payment happens securely on lcs.network, not in this app. " + CANCEL_TERMS + " " + IDENTITY_WARNING,
@@ -584,6 +621,8 @@ fun GatewaySettingsCard() {
         }
         TextButton(onClick = { manager.kick(force = true) }) { Text("Check again") }
         TorOption()
+        EncryptionDetails()
+        Text(UNLIMITED_DATA, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         ui.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         Text(CANCEL_TERMS, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(IDENTITY_WARNING, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -118,11 +118,13 @@ fun LcsGlobalPage(
         )
         Spacer(modifier = Modifier.height(16.dp))
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Point("AES-256 CBC end-to-end encrypted voice calls, messaging, and picture/file transfer")
+            Point("End-to-end encrypted messages, voice calls, pictures and files (AES-256, X25519, Ed25519)")
             Point("No phone number or email needed")
-            Point("Works over WiFi and mobile data")
+            Point("Works over Wi-Fi and mobile data, with unlimited data")
+            Point("Reach Liberty Chat and LCS MeshChat users anywhere on the Liberty network")
             Point("Free for ${GatewayConfig.TRIAL_DAYS} days, then ${fromPrice(plans)}; family plans available")
         }
+        network.libertychat.app.gateway.ui.EncryptionDetails()
         Spacer(modifier = Modifier.height(24.dp))
 
         if (selected && choice == null) {
@@ -202,7 +204,8 @@ fun LcsGlobalPage(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                 ) {
                     Text(
-                        "Payment happens on lcs.network in your browser, not in this app. Come back here when you're done.",
+                        "Payment happens on lcs.network in your browser, not in this app. It connects here by itself " +
+                            "once you've paid.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     PlanButtons(plans, enabled = true) { plan ->
