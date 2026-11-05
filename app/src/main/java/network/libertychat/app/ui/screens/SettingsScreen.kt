@@ -113,6 +113,7 @@ fun SettingsScreen(
     // LCS: push-to-talk prefs are separate StateFlows, not part of the main state combine
     val pttEnabled by viewModel.pttEnabled.collectAsState()
     val pttHighBandwidth by viewModel.pttHighBandwidth.collectAsState()
+    val checkUpdatesAtStartup by viewModel.checkUpdatesAtStartup.collectAsState()
     val blockedPeerCount by blockedUsersViewModel.blockedPeerCount.collectAsState()
     val qrCodeData by debugViewModel.qrCodeData.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -582,6 +583,8 @@ fun SettingsScreen(
                     onPttToggle = { viewModel.setPttEnabled(it) },
                     pttHighBandwidth = pttHighBandwidth,
                     onPttHighBandwidthToggle = { viewModel.setPttHighBandwidth(it) },
+                    checkUpdatesAtStartup = checkUpdatesAtStartup,
+                    onCheckUpdatesAtStartupToggle = { viewModel.setCheckUpdatesAtStartup(it) },
                 )
 
                 // About section

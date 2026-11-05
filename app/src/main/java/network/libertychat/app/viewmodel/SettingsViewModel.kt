@@ -249,7 +249,6 @@ class SettingsViewModel
             private const val RETRY_DELAY_MS = 1000L
             private const val SHARED_INSTANCE_MONITOR_INTERVAL_MS = 5_000L // Check every 5 seconds
             private const val SHARED_INSTANCE_PORT = 37428 // Default RNS shared instance port (for logging)
-            private const val UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L // 24 hours
 
             /**
              * Controls whether shared instance monitors are started in init.
@@ -1939,6 +1938,20 @@ class SettingsViewModel
                 initialValue = false,
             )
 
+        /** LCS: Settings > Advanced > "Check for updates at startup" (on by default). */
+        val checkUpdatesAtStartup: StateFlow<Boolean> =
+            settingsRepository.checkUpdatesAtStartupFlow.stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = true,
+            )
+
+        fun setCheckUpdatesAtStartup(enabled: Boolean) {
+            viewModelScope.launch {
+                settingsRepository.setCheckUpdatesAtStartup(enabled)
+            }
+        }
+
         fun setPttEnabled(enabled: Boolean) {
             viewModelScope.launch {
                 settingsRepository.setPttEnabled(enabled)
@@ -2541,20 +2554,13 @@ class SettingsViewModel
                 val initial = settingsRepository.includePrereleaseUpdates.first()
                 _state.update { it.copy(includePrereleaseUpdates = initial) }
 
-                maybeCheckForUpdatesOnStartup()
+                // LCS: the startup check (and its popup) is AppUpdateNotifier's job now;
+                // here the About card only checks when asked.
 
                 // Continue observing subsequent changes
                 settingsRepository.includePrereleaseUpdates.drop(1).collect { include ->
                     _state.update { it.copy(includePrereleaseUpdates = include) }
                 }
-            }
-        }
-
-        private suspend fun maybeCheckForUpdatesOnStartup() {
-            val lastCheck = settingsRepository.getLastUpdateCheckTime()
-            val now = System.currentTimeMillis()
-            if (now - lastCheck >= UPDATE_CHECK_INTERVAL_MS) {
-                checkForUpdates()
             }
         }
 

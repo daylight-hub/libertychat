@@ -6,7 +6,7 @@
          so a logo is on screen from the very first frame, while the app loads.
          It can only show an icon, never text — so the wordmark is added by the
          in-app overlay (LcsBrandedSplashOverlay), which continues on the same
-         white field with the same logo plus "Liberty Chat / powered by Columba".
+         white field with the same logo plus "Liberty Chat".
 
          android:windowSplashScreenBrandingImage is deliberately NOT used: it is
          API 31+ only and androidx core-splashscreen does not emulate it, so it

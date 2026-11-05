@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -71,6 +72,8 @@ fun AdvancedCard(
     onPttToggle: (Boolean) -> Unit = {},
     pttHighBandwidth: Boolean = false,
     onPttHighBandwidthToggle: (Boolean) -> Unit = {},
+    checkUpdatesAtStartup: Boolean = true,
+    onCheckUpdatesAtStartupToggle: (Boolean) -> Unit = {},
 ) {
     val canHostShareInstance = LocalCapabilities.current.performance.shareInstanceHosting
     CollapsibleSettingsCard(
@@ -338,5 +341,44 @@ fun AdvancedCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+
+        // LCS: the update check when the app opens (popup with the same build's download).
+        Spacer(Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SystemUpdate,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "Check for Updates at Startup",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(
+                checked = checkUpdatesAtStartup,
+                onCheckedChange = onCheckUpdatesAtStartupToggle,
+            )
+        }
+        Text(
+            text =
+                "When Liberty Chat opens, look for a newer version on GitHub, or on " +
+                    "public.lcs.network if GitHub can't be reached, and offer the download for " +
+                    "the same build as the one on this phone. Goes through Tor when LCS Global " +
+                    "is set to connect through Tor. On by default.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

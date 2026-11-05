@@ -9,6 +9,19 @@ upstream; upstream's own history is not repeated here.
 
 ---
 
+## 2.3.5
+
+### Added
+
+- Update check at startup: when a newer version is out, a popup offers the download for the
+  same build as the one installed. Checks GitHub first, then public.lcs.network/downloads.
+  Can be turned off in Settings > Advanced ("Check for Updates at Startup", on by default).
+- "Read the Holy Bible" button in About, under the LCS Network Guide.
+
+### Changed
+
+- Splash screen and About header show Liberty Chat only.
+
 ## 2.3.4
 
 ### Changed

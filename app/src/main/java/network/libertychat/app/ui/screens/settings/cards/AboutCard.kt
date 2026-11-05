@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -51,6 +52,9 @@ import androidx.core.net.toUri
  */
 private const val LCS_NETWORK_GUIDE_URL = "https://lcs.network/guide"
 
+/** LCS: the King James Bible, on the LCS website. */
+private const val KJV_BIBLE_URL = "https://lcs.network/kjv-bible"
+
 @Composable
 fun AboutCard(
     isExpanded: Boolean,
@@ -87,12 +91,6 @@ fun AboutCard(
                 text = "Liberty Chat",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-            )
-
-            Text(
-                text = "Powered by Torlando-Tech's Columba",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Text(
@@ -137,6 +135,20 @@ fun AboutCard(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text("LCS Network Guide", style = MaterialTheme.typography.bodyMedium)
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        openExternalUrl(context, KJV_BIBLE_URL)
+                    },
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoStories,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Read the Holy Bible", style = MaterialTheme.typography.bodyMedium)
                 }
             }
 
@@ -200,8 +212,7 @@ fun AboutCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = "Liberty Chat — powered by Torlando-Tech's Columba — " +
-                        "a Liberty Communication Systems, Inc. distribution",
+                    text = "Liberty Chat — a Liberty Communication Systems, Inc. distribution",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

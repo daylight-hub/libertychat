@@ -182,6 +182,7 @@ class SettingsRepository
             // Update checker preferences
             val INCLUDE_PRERELEASE_UPDATES = booleanPreferencesKey("include_prerelease_updates")
             val LAST_UPDATE_CHECK_TIME = longPreferencesKey("last_update_check_time")
+            val CHECK_UPDATES_AT_STARTUP = booleanPreferencesKey("check_updates_at_startup")
 
             // Message sort order: false = received time (default), true = sent time
             val SORT_MESSAGES_BY_SENT_TIME = booleanPreferencesKey("sort_messages_by_sent_time")
@@ -2530,6 +2531,19 @@ class SettingsRepository
         suspend fun setIncludePrereleaseUpdates(enabled: Boolean) {
             context.dataStore.edit { preferences ->
                 preferences[PreferencesKeys.INCLUDE_PRERELEASE_UPDATES] = enabled
+            }
+        }
+
+        /** LCS: look for a newer Liberty Chat each time the app starts. On by default. */
+        val checkUpdatesAtStartupFlow: Flow<Boolean> =
+            context.dataStore.data
+                .map { preferences ->
+                    preferences[PreferencesKeys.CHECK_UPDATES_AT_STARTUP] ?: true
+                }.distinctUntilChanged()
+
+        suspend fun setCheckUpdatesAtStartup(enabled: Boolean) {
+            context.dataStore.edit { preferences ->
+                preferences[PreferencesKeys.CHECK_UPDATES_AT_STARTUP] = enabled
             }
         }
 

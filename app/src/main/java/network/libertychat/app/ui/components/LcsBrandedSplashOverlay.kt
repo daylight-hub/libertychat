@@ -34,10 +34,9 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import network.libertychat.app.R
 import network.libertychat.app.ui.theme.LibertyNavy40
-import network.libertychat.app.ui.theme.LibertySilver40
 
 /**
- * LCS: the "Liberty Chat — powered by Columba" splash wordmark.
+ * LCS: the "Liberty Chat" splash wordmark.
  *
  * ## Why the app draws this instead of the system
  *
@@ -192,22 +191,11 @@ fun LcsBrandedSplashOverlay(
 
                 Spacer(Modifier.height(24.dp))
 
-                // Stacked, not side by side: together on one line these need
-                // roughly 300 dp, which clips on 320 dp-wide screens.
                 Text(
                     text = "Liberty Chat",
                     color = LibertyNavy40,
                     fontSize = 30.sp,
                     fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "powered by Columba",
-                    color = LibertySilver40,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                 )

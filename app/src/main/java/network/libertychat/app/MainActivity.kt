@@ -190,6 +190,9 @@ class MainActivity : ComponentActivity() {
     lateinit var settingsRepository: SettingsRepository
 
     @Inject
+    lateinit var appUpdateNotifier: network.libertychat.app.service.AppUpdateNotifier
+
+    @Inject
     lateinit var interfaceRepository: InterfaceRepository
 
     @Inject
@@ -361,6 +364,9 @@ class MainActivity : ComponentActivity() {
         }
         Log.d(TAG, "🔌 USB BroadcastReceiver registered for attach/detach")
 
+        // LCS: look for a newer Liberty Chat when the app is opened (not on rotation).
+        if (savedInstanceState == null) appUpdateNotifier.onAppOpened()
+
         setContent {
             // Signal splash screen dismissal once theme loads
             val settingsViewModel: network.libertychat.app.viewmodel.SettingsViewModel = hiltViewModel()
@@ -411,6 +417,9 @@ class MainActivity : ComponentActivity() {
                 )
                 // trial-ending / trial-ended / renew reminders for LCS Global.
                 network.libertychat.app.gateway.ui.GatewayReminderHost()
+                // LCS: "Update available" popup from the startup check (after onboarding).
+                val onboarded by settingsRepository.hasCompletedOnboardingFlow.collectAsState(initial = false)
+                network.libertychat.app.ui.components.AppUpdateHost(ready = onboarded)
             }
         }
 
