@@ -3,9 +3,8 @@
 **Private messaging, voice messages and voice calls for Android, with or without the internet.**
 
 Liberty Chat is made by Liberty Communication Systems, Inc. (LCS). It runs on
-Reticulum, an encrypted mesh networking stack, so messages travel over whatever
-link is available: Bluetooth LE between nearby phones, local Wi-Fi, TCP over the
-internet, or long-range LoRa radios (RNode).
+Reticulum, an encrypted self-configuring mesh networking stack, so messages travel over whatever
+link is available: LCS Global, Bluetooth LE between nearby phones, local Wi-Fi, or long-range LoRa radios (RNode).
 
 No phone number, email address or account is needed.
 
@@ -26,9 +25,9 @@ No phone number, email address or account is needed.
    on a fresh route and, if needed, held by a propagation node until they come
    back online.
 4. **LCS Global connects you to the wider Liberty network.** Local Wi-Fi,
-   Bluetooth and LoRa reach people near you. LCS Global is an optional paid
+   Bluetooth and LoRa reach people near you. LCS Global has a free 7-day trial with an optional paid
    service that links Liberty Chat to the Liberty network over Wi-Fi or mobile
-   data, so you can reach people who are out of radio range. It only carries
+   data, so you can reach people who are out of radio range. It stores messages for offline users until they return online. It only carries
    encrypted packets and can't read them.
 
 ## Works with LCS MeshChat
@@ -43,8 +42,6 @@ with no bridge or conversion in between:
 - Profile icons
 - Reach each other over the same local network, the same LoRa repeaters, or
   anywhere through LCS Global
-
-Liberty Chat also works with other Reticulum apps such as Sideband and NomadNet.
 
 ---
 
@@ -71,13 +68,13 @@ Liberty Chat also works with other Reticulum apps such as Sideband and NomadNet.
 - Multiple identities
 - Backup and restore to a single file
 
-### Connections
+### Interfaces
+- **LCS Global** Connect with others on this gateway worldwide. 
 - **Bluetooth LE**: phone-to-phone, no other hardware needed
 - **Wi-Fi**: finds other Reticulum devices on the same network automatically
-- **TCP**: LCS Global, Command Center PRO (`liberty.local:4246`), or any
-  Reticulum server
+- **TCP**: Command Center PRO (`liberty.local:4246`), or the IPRNode
 - **RNode (LoRa)**: connect over USB or Bluetooth
-- Nothing reaches the internet until you add a server or LCS Global
+- Nothing reaches the internet until you add LCS Global
 
 ### RNode radio setup
 - US default frequency 914.875 MHz (LCS slot 51)
