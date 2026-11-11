@@ -6,9 +6,9 @@ import android.content.Intent
 import androidx.core.net.toUri
 
 /**
- * Shared URL for filing bug reports against Columba on GitHub.
+ * Shared URL for filing Liberty Chat bug reports on GitHub.
  */
-const val GITHUB_NEW_ISSUE_URL: String = "https://github.com/torlando-tech/columba/issues/new"
+const val GITHUB_NEW_ISSUE_URL: String = "https://github.com/daylight-hub/libertychat/issues/new"
 
 /**
  * Attempts to open the given [url] in an external handler (browser, etc.).

@@ -119,7 +119,7 @@
     <string name="codec_profile_latency_ultra_low">Ultra Low Latency</string>
 
     <!-- app_name is defined per build type in app/build.gradle.kts via resValue
-         (release: "Columba", debug: "columbatest") so debug + release builds can
+         (release: "Liberty Chat", debug: "columbatest") so debug + release builds can
          coexist on a phone with distinct launcher labels. -->
 
     <!-- Incoming call screen -->
@@ -231,7 +231,7 @@
     <string name="pyxis_update_package_choose">Choose package</string>
     <string name="pyxis_update_package_choose_another">Choose another package</string>
     <string name="pyxis_update_verify_title">Verify your update package</string>
-    <string name="pyxis_update_verify_body">Columba verifies the package format and SHA-256 hashes, but Pyxis packages are not cryptographically signed. Install only firmware you trust, whether you downloaded it, received it as an attachment, or built it yourself.</string>
+    <string name="pyxis_update_verify_body">Liberty Chat verifies the package format and SHA-256 hashes, but Pyxis packages are not cryptographically signed. Install only firmware you trust, whether you downloaded it, received it as an attachment, or built it yourself.</string>
     <string name="pyxis_update_usb_device_title">USB device</string>
     <string name="pyxis_update_usb_refresh">Refresh USB devices</string>
     <string name="pyxis_update_usb_connect_prompt">Connect the T-Deck Plus to this phone with a USB OTG data cable, then refresh.</string>
@@ -245,7 +245,7 @@
     <string name="pyxis_update_flash_usb">Flash Pyxis over USB</string>
     <string name="pyxis_update_usb_description">USB recovery flashing works without Wi-Fi or internet access.</string>
     <string name="pyxis_update_confirm_title">Install this Pyxis update?</string>
-    <string name="pyxis_update_confirm_body">The package format, image hashes, target hardware, and flash layout were verified. Columba cannot verify who created the package, so continue only if you trust its contents. The updater writes only OTA metadata and the application slot; NVS and LittleFS are preserved.</string>
+    <string name="pyxis_update_confirm_body">The package format, image hashes, target hardware, and flash layout were verified. Liberty Chat cannot verify who created the package, so continue only if you trust its contents. The updater writes only OTA metadata and the application slot; NVS and LittleFS are preserved.</string>
     <string name="pyxis_update_install">Install</string>
     <string name="pyxis_update_cancel">Cancel</string>
     <string name="pyxis_update_failed_title">Pyxis update failed</string>

@@ -719,7 +719,7 @@ enum class InterfaceMode(
 
 /**
  * Restricts an interface to a specific Android transport type. Mobile-specific concern
- * with no python upstream equivalent — see `port-deviations.md`.
+ * with no python upstream equivalent.
  *
  * `ETHERNET` is bucketed with `WIFI_ONLY` since the local link is wired/wifi-like from
  * the user's perspective (USB tether to a PC, dock, etc.).

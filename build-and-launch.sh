@@ -15,7 +15,7 @@ APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
 # Custom AVD name can be passed as first argument
 CUSTOM_AVD="$1"
 
-echo -e "${BLUE}=== Columba LXMF Messenger - Build and Launch ===${NC}\n"
+echo -e "${BLUE}=== Liberty Chat - Build and Launch ===${NC}\n"
 
 # Step 1: Build the APK
 echo -e "${YELLOW}[1/5] Building APK...${NC}"

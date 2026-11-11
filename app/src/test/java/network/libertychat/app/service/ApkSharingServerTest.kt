@@ -116,7 +116,7 @@ class ApkSharingServerTest {
                 assertEquals(200, conn.responseCode)
                 assertEquals("text/html; charset=utf-8", conn.contentType)
                 val body = conn.inputStream.bufferedReader().readText()
-                assertTrue("Page should contain download link", body.contains("/columba.apk"))
+                assertTrue("Page should contain download link", body.contains("/libertychat.apk"))
                 assertTrue("Page should contain Columba title", body.contains("Columba"))
             } finally {
                 conn.disconnect()
@@ -124,12 +124,12 @@ class ApkSharingServerTest {
         }
 
     @Test
-    fun `GET columba apk returns the file with correct headers`() =
+    fun `GET libertychat apk returns the file with correct headers`() =
         runTest {
-            server.downloadFileName = "columba-1.2.3.apk"
+            server.downloadFileName = "libertychat-1.2.3.apk"
             val (port) = startAndAwaitPort()
 
-            val conn = URL("http://127.0.0.1:$port/columba.apk").openConnection() as HttpURLConnection
+            val conn = URL("http://127.0.0.1:$port/libertychat.apk").openConnection() as HttpURLConnection
             try {
                 assertEquals(200, conn.responseCode)
                 assertEquals("application/vnd.android.package-archive", conn.contentType)
@@ -137,7 +137,7 @@ class ApkSharingServerTest {
                 val disposition = conn.getHeaderField("Content-Disposition")
                 assertTrue(
                     "Content-Disposition should use downloadFileName",
-                    disposition.contains("columba-1.2.3.apk"),
+                    disposition.contains("libertychat-1.2.3.apk"),
                 )
                 val body = conn.inputStream.bufferedReader().readText()
                 assertEquals(apkFile.readText(), body)
@@ -165,7 +165,7 @@ class ApkSharingServerTest {
             val (port) = startAndAwaitPort()
 
             repeat(3) {
-                val conn = URL("http://127.0.0.1:$port/columba.apk").openConnection() as HttpURLConnection
+                val conn = URL("http://127.0.0.1:$port/libertychat.apk").openConnection() as HttpURLConnection
                 try {
                     assertEquals(200, conn.responseCode)
                     val body = conn.inputStream.bufferedReader().readText()
@@ -183,7 +183,7 @@ class ApkSharingServerTest {
 
             apkFile.delete()
 
-            val conn = URL("http://127.0.0.1:$port/columba.apk").openConnection() as HttpURLConnection
+            val conn = URL("http://127.0.0.1:$port/libertychat.apk").openConnection() as HttpURLConnection
             try {
                 assertEquals(404, conn.responseCode)
             } finally {

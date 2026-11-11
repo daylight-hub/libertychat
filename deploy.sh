@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Columba Android App - Build and Deploy Script
+# Liberty Chat - Build and Deploy Script
 # Builds the app and deploys it to a connected Android device via ADB
 
 set -e  # Exit on error
@@ -78,7 +78,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Main script
-print_header "Columba Build & Deploy"
+print_header "Liberty Chat Build & Deploy"
 
 # Step 1: Clean build (optional)
 if [ "$CLEAN" = true ]; then

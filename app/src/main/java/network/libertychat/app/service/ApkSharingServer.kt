@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Lightweight HTTP server that serves the Columba APK file for local sharing.
  *
  * When started, it binds to a random available port and serves the APK file
- * at the path `/columba.apk`. The server runs on the caller's coroutine scope
+ * at the path `/libertychat.apk`. The server runs on the caller's coroutine scope
  * and can be stopped by calling [stop].
  *
  * This is designed for sharing the APK over a local WiFi network. The receiver
@@ -84,7 +84,7 @@ class ApkSharingServer {
     }
 
     /** Filename used in the Content-Disposition header when serving the APK. */
-    var downloadFileName: String = "columba.apk"
+    var downloadFileName: String = "libertychat.apk"
 
     /** Base64-encoded PNG app icon for the download page. Set by the ViewModel. */
     var iconBase64: String? = null
@@ -175,7 +175,7 @@ class ApkSharingServer {
 
     /**
      * Handle a single HTTP client connection.
-     * Serves the APK file for GET /columba.apk,
+     * Serves the APK file for GET /libertychat.apk,
      * and returns a simple HTML download page for the root path.
      */
     private fun handleClient(
@@ -198,7 +198,7 @@ class ApkSharingServer {
                 }
 
                 when {
-                    requestLine.startsWith("GET /columba.apk") -> {
+                    requestLine.startsWith("GET /libertychat.apk") -> {
                         serveApkFile(output, apkFile)
                     }
                     requestLine.startsWith("GET / ") || requestLine.startsWith("GET / HTTP") -> {
@@ -267,7 +267,7 @@ class ApkSharingServer {
     private fun buildDownloadPageHtml(): String {
         val iconTag =
             iconBase64?.let {
-                """<img class="icon" src="data:image/png;base64,$it" alt="Columba">"""
+                """<img class="icon" src="data:image/png;base64,$it" alt="Liberty Chat">"""
             } ?: ""
 
         return """
@@ -325,7 +325,7 @@ class ApkSharingServer {
                     $iconTag
                     <h1>Columba</h1>
                     <p>Tap the button below to download the Columba messenger APK.</p>
-                    <a class="btn" href="/columba.apk">Download APK</a>
+                    <a class="btn" href="/libertychat.apk">Download APK</a>
                     <p class="note">After downloading, open the file to install.<br>
                     You may need to enable "Install from unknown sources".</p>
                 </div>

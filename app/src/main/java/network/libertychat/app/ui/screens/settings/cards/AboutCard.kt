@@ -207,30 +207,19 @@ fun AboutCard(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = "MPL 2.0",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "Liberty Chat — a Liberty Communication Systems, Inc. distribution",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "Based on Columba © 2025–${network.libertychat.app.BuildConfig.COPYRIGHT_YEAR} " +
-                        "Columba Contributors (torlando-tech) — original design & code",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "LCS branding & modifications © ${network.libertychat.app.BuildConfig.COPYRIGHT_YEAR} " +
+                    text = "Liberty Chat © ${network.libertychat.app.BuildConfig.COPYRIGHT_YEAR} " +
                         "Liberty Communication Systems, Inc.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "Free software under the Mozilla Public License 2.0",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 TextButton(
                     onClick = {
-                        openExternalUrl(context, "https://github.com/daylight-hub/libertychat/blob/liberty-chat/LICENSE.md")
+                        openExternalUrl(context, "https://github.com/daylight-hub/libertychat/blob/HEAD/LICENSE.md")
                     },
                 ) {
                     Text("View License", style = MaterialTheme.typography.bodySmall)
@@ -252,6 +241,8 @@ fun AboutCard(
             ) {
                 Text("Reticulum by Mark Qvist", style = MaterialTheme.typography.bodySmall)
                 Text("LXMF by Mark Qvist", style = MaterialTheme.typography.bodySmall)
+                Text("LXST by Mark Qvist", style = MaterialTheme.typography.bodySmall)
+                Text("Columba by torlando-tech", style = MaterialTheme.typography.bodySmall)
                 Text("Material Design 3", style = MaterialTheme.typography.bodySmall)
                 Text("Jetpack Compose", style = MaterialTheme.typography.bodySmall)
             }

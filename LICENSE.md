@@ -1,20 +1,39 @@
-LIBERTY CHAT — LICENSE & ATTRIBUTION NOTICE
-===========================================
+LIBERTY CHAT LICENSE
+====================
 
-Liberty Chat — powered by Torlando-Tech's Columba — is a branded distribution by
-Liberty Communication Systems, Inc. ("LCS") of the Columba application.
+Liberty Chat
+Copyright (c) 2026 Liberty Communication Systems, Inc.
 
-  * Original application: Columba — Copyright (c) 2025-2026 Columba
-    Contributors (torlando-tech). Original design and source code.
-    Upstream: https://github.com/torlando-tech/columba
-  * LCS branding, configuration, and modifications:
+Liberty Chat is free software. Its source code is licensed under the Mozilla
+Public License, Version 2.0 (full text below). The source code for every
+release is published in this repository.
+
+Credits
+-------
+
+Liberty Chat is built on the following open-source projects. Their copyright
+notices are kept, and their license terms are reproduced in full in
+app/src/main/assets/licenses/THIRD-PARTY-NOTICES.md, which also ships
+inside every Liberty Chat APK.
+
+  * Reticulum, Copyright (c) 2016-2026 Mark Qvist. Reticulum License.
+  * LXMF, Copyright (c) 2020-2025 Mark Qvist. Reticulum License.
+  * LXST, the voice protocol by Mark Qvist. Liberty Chat uses LXST-kt, a
+    Kotlin implementation, Copyright (c) torlando-tech, with modifications
     Copyright (c) 2026 Liberty Communication Systems, Inc.
+    Mozilla Public License 2.0.
+  * Columba, Copyright (c) 2025-2026 Columba Contributors (torlando-tech).
+    Mozilla Public License 2.0. Liberty Chat was originally forked from
+    Columba. Source files that came from Columba keep their original
+    copyright, and the changes to them are Copyright (c) 2026 Liberty
+    Communication Systems, Inc., under the same license.
 
-Columba is licensed under the Mozilla Public License, Version 2.0 (below).
-This fork remains under the same MPL 2.0 license. Per MPL 2.0, the original
-copyright notices are retained and the source of any modified MPL-covered
-files is disclosed at the LCS fork repository. The names, trademarks, and
-logos of the original authors are not used to endorse or promote this fork.
+The names and trademarks of these projects and their authors are used only to
+credit their work. They do not endorse Liberty Chat.
+
+"Liberty Chat", "LCS", "LCS Global", "LCS MeshChat" and the Liberty Chat and
+LCS logos are trademarks of Liberty Communication Systems, Inc. The Mozilla
+Public License does not grant any rights to them (MPL 2.0, section 2.3).
 
 -------------------------------------------------------------------------------
 

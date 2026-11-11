@@ -241,8 +241,8 @@ android {
 
     buildTypes {
         release {
-            // app_name is set per rnsImpl flavor (pythonBackend -> "Columba",
-            // kotlinBackend -> "Columba (Kotlin)") rather than here, so the two
+            // app_name is set per rnsImpl flavor (pythonBackend -> "Liberty Chat",
+            // kotlinBackend -> "Liberty Chat (Kotlin)") rather than here, so the two
             // backends get distinct launcher labels in release builds.
             isMinifyEnabled = true
             proguardFiles(

@@ -1,11 +1,6 @@
 # Changelog
 
-All notable changes to Liberty Chat, relative to the upstream Columba release it
-forked from.
-
-Liberty Chat is a downstream distribution of [Columba](https://github.com/torlando-tech/columba)
-by Liberty Communication Systems. Everything below is an LCS change on top of
-upstream; upstream's own history is not repeated here.
+All notable changes to Liberty Chat.
 
 ---
 

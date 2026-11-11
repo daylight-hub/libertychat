@@ -149,7 +149,7 @@ fun MigrationScreen(
                         "yyyy-MM-dd_HHmmss",
                         Locale.US,
                     ).format(Date())
-                exportSaveLauncher.launch("columba_export_$timestamp.columba")
+                exportSaveLauncher.launch("libertychat_backup_$timestamp.columba")
                 viewModel.onExportSaveDialogLaunched()
             }
             is MigrationUiState.ExportSaved -> {

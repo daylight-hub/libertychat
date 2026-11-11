@@ -77,7 +77,7 @@ class AboutCardTest {
         )
 
     @Test
-    fun `displays Columba logo`() {
+    fun `displays Liberty Chat logo`() {
         composeTestRule.setContent {
             ColumbaTheme {
                 AboutCard(
@@ -90,7 +90,7 @@ class AboutCardTest {
             }
         }
 
-        composeTestRule.onNodeWithContentDescription("Columba Logo").assertExists()
+        composeTestRule.onNodeWithContentDescription("Liberty Chat Logo").assertExists()
     }
 
     @Test
@@ -107,7 +107,7 @@ class AboutCardTest {
             }
         }
 
-        composeTestRule.onNodeWithText("Columba").assertExists()
+        composeTestRule.onNodeWithText("Liberty Chat").assertExists()
     }
 
     @Test
@@ -271,7 +271,7 @@ class AboutCardTest {
         }
 
         // If we get here without crashing, the test passes
-        composeTestRule.onNodeWithText("Columba").assertExists()
+        composeTestRule.onNodeWithText("Liberty Chat").assertExists()
     }
 
     @Test
@@ -289,7 +289,7 @@ class AboutCardTest {
         }
 
         // Should still render the basic structure
-        composeTestRule.onNodeWithText("Columba").assertExists()
+        composeTestRule.onNodeWithText("Liberty Chat").assertExists()
         composeTestRule.onNodeWithText("Copy System Info").assertExists()
     }
 
@@ -314,7 +314,7 @@ class AboutCardTest {
             }
         }
 
-        composeTestRule.onNodeWithText("Columba").assertExists()
+        composeTestRule.onNodeWithText("Liberty Chat").assertExists()
     }
 
     @Test
@@ -333,7 +333,7 @@ class AboutCardTest {
             }
         }
 
-        composeTestRule.onNodeWithText("Columba").assertExists()
+        composeTestRule.onNodeWithText("Liberty Chat").assertExists()
     }
 
     @Test
@@ -387,7 +387,7 @@ class AboutCardTest {
         }
 
         // Should still render basic structure without crashing
-        composeTestRule.onNodeWithText("Columba").assertExists()
+        composeTestRule.onNodeWithText("Liberty Chat").assertExists()
         composeTestRule.onNodeWithText("Copy System Info").assertExists()
     }
 

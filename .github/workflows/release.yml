@@ -196,9 +196,8 @@ jobs:
           body: |
             ## Liberty Chat ${{ steps.version.outputs.version }}
 
-            Messaging and voice over LXMF / Reticulum (Bluetooth LE, TCP, or RNode
-            LoRa), distributed by Liberty Communication Systems, Inc. Built on
-            Columba (MPL 2.0).
+            Private messaging, voice messages and voice calls over Bluetooth LE,
+            Wi-Fi, TCP, or RNode LoRa, from Liberty Communication Systems, Inc.
 
             ### What's new since ${{ steps.changelog.outputs.prev }}
             <!-- Generated from the commits since the previous release tag.

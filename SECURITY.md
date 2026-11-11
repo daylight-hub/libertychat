@@ -1,47 +1,27 @@
 # Security Policy
 
-## APK Verification
+## Verifying a download
 
-All official Columba releases are signed with our release certificate:
-
-**SHA-256:**
-```
-02:2B:12:20:48:63:A3:1F:BF:07:5B:C9:F9:34:1E:33:52:78:80:2E:80:C9:27:A4:75:46:E4:7E:2F:4A:0C:5F
-```
-
-**SHA-1:**
-```
-0A:6B:AE:58:4E:D7:B5:D0:35:8B:3C:7B:65:11:D6:3A:81:21:0D:CE
-```
-
-### Verifying Before Installation
-
-With Android SDK tools installed:
+Each Liberty Chat release on GitHub includes a `.sha256` file for every APK.
+Check the APK against it before installing:
 
 ```bash
-apksigner verify --print-certs columba-x.x.x.apk
+sha256sum -c libertychat-x.y.z-official-rns-py-arm64-v8a.apk.sha256
 ```
 
-Compare the SHA-256 digest in the output with the fingerprint above.
+If the check fails, don't install the APK. Delete it and download it again from
+this repository's Releases page.
 
-### SHA256 Checksums
+Android checks that every update is signed with the same key as the installed
+app, so once your first install is verified, later updates are protected.
 
-Release APKs include a `.sha256` file:
+## Reporting a vulnerability
 
-```bash
-sha256sum -c columba-x.x.x.apk.sha256
-```
+Report security problems through this repository's Issues page with the
+"security" label, or privately through the contact details in the app
+(Settings > About). Include the steps to reproduce it and what an attacker
+could do with it.
 
-### If Verification Fails
+## Supported versions
 
-Do not install. Delete the APK and download only from [GitHub Releases](https://github.com/torlando-tech/columba/releases). Report suspicious APKs via [GitHub Issues](https://github.com/torlando-tech/columba/issues).
-
-**Note:** Android automatically verifies that app updates are signed with the same certificate, so subsequent updates are protected after you've verified your first installation.
-
-## Reporting Vulnerabilities
-
-Report security issues via [GitHub Issues](https://github.com/torlando-tech/columba/issues) with the "security" label. Include steps to reproduce and potential impact.
-
-## Supported Versions
-
-Only the latest release receives security updates.
+Only the latest release receives security fixes.
