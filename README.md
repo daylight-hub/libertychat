@@ -1,4 +1,8 @@
-# Liberty Chat
+<p align="center">
+  <img src="docs/images/lcs-logo.png" alt="Liberty Communication Systems logo" width="180">
+</p>
+
+<h1 align="center">Liberty Chat</h1>
 
 **Private messaging, voice messages and voice calls for Android, with or without the internet.**
 
@@ -7,6 +11,12 @@ Reticulum, an encrypted self-configuring mesh networking stack, so messages trav
 link is available: LCS Global, Bluetooth LE between nearby phones, local Wi-Fi, or long-range LoRa radios (RNode).
 
 No phone number, email address or account is needed.
+
+<p align="center">
+  <img src="docs/images/screenshot-chats.png" alt="Chats list" width="250">
+  <img src="docs/images/screenshot-conversation.png" alt="A conversation with a voice message" width="250">
+  <img src="docs/images/screenshot-call.png" alt="A voice call in progress" width="250">
+</p>
 
 ---
 
