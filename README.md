@@ -83,7 +83,7 @@ with no bridge or conversion in between:
 - **Bluetooth LE**: phone-to-phone, no other hardware needed
 - **Wi-Fi**: finds other Reticulum devices on the same network automatically
 - **TCP**: Command Center PRO (`liberty.local:4246`), or the IPRNode
-- **RNode (LoRa)**: connect over USB or Bluetooth
+- **RNode (LoRa)**: connect over USB or Bluetooth. Auto-reconnects if disconnected.
 - Nothing reaches the internet until you add LCS Global
 
 ### RNode radio setup
