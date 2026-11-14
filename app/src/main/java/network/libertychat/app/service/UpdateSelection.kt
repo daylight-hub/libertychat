@@ -99,6 +99,31 @@ object UpdateSelection {
         }
     }
 
+    /**
+     * Just the "What's new" part of a release description, as on the release page: the lines
+     * under the first heading that starts with "What's new", up to the next heading of the same
+     * or a higher level. HTML comments are dropped. If there's no such heading, the whole
+     * description (without comments) is used.
+     */
+    fun whatsNew(markdown: String?): String {
+        val text =
+            markdown
+                .orEmpty()
+                .replace("\r\n", "\n")
+                .replace(Regex("""<!--[\s\S]*?-->"""), "")
+        val lines = text.lines()
+        val heading = Regex("""^\s{0,3}(#{1,6})\s*What['’]s new\b.*$""", RegexOption.IGNORE_CASE)
+        val start = lines.indexOfFirst { heading.matches(it) }
+        if (start < 0) return text.trim()
+        val level = heading.find(lines[start])!!.groupValues[1].length
+        val anyHeading = Regex("""^\s{0,3}(#{1,6})\s+\S""")
+        val end =
+            (start + 1 until lines.size).firstOrNull { i ->
+                anyHeading.find(lines[i])?.let { it.groupValues[1].length <= level } == true
+            } ?: lines.size
+        return lines.subList(start + 1, end).joinToString("\n").trim()
+    }
+
     /** A plain-text version of GitHub's Markdown release notes, short enough for a popup. */
     fun tidyNotes(
         markdown: String?,

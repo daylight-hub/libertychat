@@ -27,6 +27,16 @@ this repository's Releases page.
 Android checks that every update is signed with the same key as the installed
 app, so once your first install is verified, later updates are protected.
 
+## Signing certificate
+
+Every Liberty Chat APK is signed with the same LCS release key. Its fingerprints
+are:
+
+```
+SHA-256: B8:3E:B0:61:1D:65:36:69:22:18:CA:1C:07:48:4E:4F:47:A5:FF:F1:F9:EE:51:EA:EF:F4:17:DE:E3:22:25:76
+SHA-1:   F1:21:86:E5:4E:67:7C:D7:E3:CB:5A:C0:09:B0:AB:78:14:5C:D3:32
+```
+
 ## Reporting a vulnerability
 
 Report security problems through this repository's Issues page with the
