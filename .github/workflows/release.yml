@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write # sign the build attestation
+      attestations: write # store the build attestation
 
     steps:
       - name: Checkout code
@@ -170,6 +172,16 @@ jobs:
         run: |
           for apk in libertychat-*.apk; do sha256sum "$apk" > "${apk}.sha256"; done
 
+      - name: Attest build provenance
+        # Records, signed by GitHub, that these exact files were built by this
+        # workflow from this commit. Anyone can check a download with:
+        #   gh attestation verify <file> -R daylight-hub/libertychat
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: |
+            libertychat-*.apk
+            libertychat-*.aab
+
       - name: Read SHA256 checksums
         id: sha256
         run: |
@@ -217,6 +229,14 @@ jobs:
             | [`libertychat-${{ steps.version.outputs.version }}-official-rns-py-universal.apk`](${{ steps.version.outputs.dl }}/libertychat-${{ steps.version.outputs.version }}-official-rns-py-universal.apk) | All | Universal fallback (larger download) |
 
             ### Verification
+            **Built on GitHub from this repository's source.** These files carry
+            a signed GitHub attestation that records the exact commit and
+            workflow they were built from. To check a download, install the
+            GitHub CLI and run:
+            ```
+            gh attestation verify libertychat-${{ steps.version.outputs.version }}-official-rns-py-arm64-v8a.apk -R ${{ github.repository }}
+            ```
+
             **Signing certificate fingerprints:**
             ```
             SHA-256: ${{ steps.cert.outputs.sha256 }}

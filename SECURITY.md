@@ -2,8 +2,20 @@
 
 ## Verifying a download
 
-Each Liberty Chat release on GitHub includes a `.sha256` file for every APK.
-Check the APK against it before installing:
+Liberty Chat releases are built on GitHub from the source in this repository,
+and each file carries a signed GitHub attestation of the commit it was built
+from. With the GitHub CLI installed, check a download with:
+
+```bash
+gh attestation verify libertychat-x.y.z-official-rns-py-arm64-v8a.apk -R daylight-hub/libertychat
+```
+
+This proves the file was built from this repository's public source and hasn't
+been changed since. Releases before the first attested version don't have
+attestations; use the checksum below for those.
+
+Each release also includes a `.sha256` file for every APK. Check the APK against
+it before installing:
 
 ```bash
 sha256sum -c libertychat-x.y.z-official-rns-py-arm64-v8a.apk.sha256

@@ -117,6 +117,19 @@ Download the latest APK from this repository's Releases page. Most phones need
 the **arm64-v8a** build; use **universal** if you're not sure. Android 12 or
 newer is recommended.
 
+### Verify your download
+
+Every release is built on GitHub from the source code in this repository, and
+GitHub signs a record of exactly which commit each file was built from. To check
+an APK you downloaded, install the GitHub CLI and run:
+
+```bash
+gh attestation verify libertychat-x.y.z-official-rns-py-arm64-v8a.apk -R daylight-hub/libertychat
+```
+
+A passing check means the file is byte-for-byte what GitHub built from this
+repository. If it fails, don't install it.
+
 ## Build from source
 
 ```bash
