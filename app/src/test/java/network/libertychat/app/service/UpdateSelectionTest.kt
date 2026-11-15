@@ -66,4 +66,27 @@ class UpdateSelectionTest {
         assertFalse(notes.contains("\n\n\n"))
         assertTrue(UpdateSelection.tidyNotes("a\n".repeat(2000), 100).endsWith("…"))
     }
+
+    @Test
+    fun `only the What's new section of a release is shown`() {
+        val body =
+            "## Liberty Chat 2.3.6\r\n\r\nPrivate messaging.\r\n\r\n" +
+                "### What's new since v2.3.5\n<!-- Generated from the commits.\n     Trim this. -->\n" +
+                "- Splash screen without the old credit\n- Notices inside the APK\n\n" +
+                "### Installation\n| APK | Architecture |\n\n### Verification\n```\nSHA-256: AB:CD\n```\n"
+        val notes = UpdateSelection.tidyNotes(UpdateSelection.whatsNew(body))
+        assertEquals("• Splash screen without the old credit\n• Notices inside the APK", notes)
+    }
+
+    @Test
+    fun `changelog subheadings inside What's new are kept`() {
+        val body = "## Liberty Chat 2.3.7\n\n### What's new\n#### Changed\n\n- Shorter popup\n\n#### Added\n\n- Notices\n\n### Installation\nx"
+        assertEquals("Changed\n\n• Shorter popup\n\nAdded\n\n• Notices", UpdateSelection.tidyNotes(UpdateSelection.whatsNew(body)))
+    }
+
+    @Test
+    fun `release text without a What's new heading is used whole, minus comments`() {
+        assertEquals("Bug fixes.", UpdateSelection.whatsNew("<!-- note -->\nBug fixes.\n"))
+        assertEquals("", UpdateSelection.whatsNew(null))
+    }
 }

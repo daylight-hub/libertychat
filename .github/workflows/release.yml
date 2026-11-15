@@ -94,6 +94,25 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "prev=$PREV_TAG" >> "$GITHUB_OUTPUT"
 
+          # "What's new": this version's section of CHANGELOG.md ("## 2.3.6" up to the next
+          # "## "). The app's update popup shows it, so it should be written for people, not
+          # be a list of commits. Falls back to the commits if the section is missing.
+          # Its "### Added" / "### Changed" headings become "####", so they stay inside the
+          # release's "### What's new" section (the popup reads up to the next "###").
+          NOTES="$(awk -v v="${{ steps.version.outputs.version }}" '
+            $0 ~ "^## " && found { exit }
+            $0 ~ "^## " v "([^0-9.]|$)" { found = 1; next }
+            found { print }' CHANGELOG.md | sed -e '/./,$!d' -e 's/^### /#### /')"
+          if [ -z "$(echo "$NOTES" | tr -d '[:space:]')" ]; then
+            echo "::warning::CHANGELOG.md has no '## ${{ steps.version.outputs.version }}' section; using the commit list."
+            NOTES="$(git log --no-merges --pretty=format:'- %s' $RANGE)"
+          fi
+          {
+            echo "notes<<NOTES_EOF"
+            echo "$NOTES"
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build Release APK (no-Sentry, Python backend)
         timeout-minutes: 40
         env:
@@ -195,58 +214,22 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           target_commitish: ${{ github.sha }}
           name: Liberty Chat ${{ steps.version.outputs.version }}
-          # The .aab isn't linked from the body below (users can't sideload
-          # it — it's Play Console upload material only) but still rides
-          # along as a release asset: those don't count against Actions
-          # storage quota the way workflow artifacts do.
+          # The .aab can't be sideloaded (it's Play Console upload material) but
+          # still rides along as a release asset.
           files: |
             libertychat-*.apk
             libertychat-*.apk.sha256
             libertychat-*.aab
+          # Created as a draft: review it on the Releases page, then press
+          # "Publish release" with "Set as the latest release" ticked. Phones only
+          # see published releases.
           draft: true
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          # Only what's new: the app's update popup shows this text under its own
+          # "What's new" label (versions up to 2.3.5 show all of it). Install and
+          # verify steps are in the README.
           body: |
-            ## Liberty Chat ${{ steps.version.outputs.version }}
-
-            Private messaging, voice messages and voice calls over Bluetooth LE,
-            Wi-Fi, TCP, or RNode LoRa, from Liberty Communication Systems, Inc.
-
-            ### What's new since ${{ steps.changelog.outputs.prev }}
-            <!-- Generated from the commits since the previous release tag.
-                 Trim this to the user-visible changes before publishing. -->
-            ${{ steps.changelog.outputs.changes }}
-
-            ### Installation
-            Download the APK matching your phone's CPU. Most modern phones are
-            **arm64-v8a**; if unsure, use **universal**.
-
-            #### Python backend (`official-rns-py`)
-            | APK | Architecture | Devices |
-            |-----|-------------|---------|
-            | [`libertychat-${{ steps.version.outputs.version }}-official-rns-py-arm64-v8a.apk`](${{ steps.version.outputs.dl }}/libertychat-${{ steps.version.outputs.version }}-official-rns-py-arm64-v8a.apk) | arm64-v8a | Most modern Android phones & tablets |
-            | [`libertychat-${{ steps.version.outputs.version }}-official-rns-py-armeabi-v7a.apk`](${{ steps.version.outputs.dl }}/libertychat-${{ steps.version.outputs.version }}-official-rns-py-armeabi-v7a.apk) | armeabi-v7a | Older 32-bit ARM devices |
-            | [`libertychat-${{ steps.version.outputs.version }}-official-rns-py-x86_64.apk`](${{ steps.version.outputs.dl }}/libertychat-${{ steps.version.outputs.version }}-official-rns-py-x86_64.apk) | x86_64 | Chromebooks, emulators, some tablets |
-            | [`libertychat-${{ steps.version.outputs.version }}-official-rns-py-universal.apk`](${{ steps.version.outputs.dl }}/libertychat-${{ steps.version.outputs.version }}-official-rns-py-universal.apk) | All | Universal fallback (larger download) |
-
-            ### Verification
-            **Built on GitHub from this repository's source.** These files carry
-            a signed GitHub attestation that records the exact commit and
-            workflow they were built from. To check a download, install the
-            GitHub CLI and run:
-            ```
-            gh attestation verify libertychat-${{ steps.version.outputs.version }}-official-rns-py-arm64-v8a.apk -R ${{ github.repository }}
-            ```
-
-            **Signing certificate fingerprints:**
-            ```
-            SHA-256: ${{ steps.cert.outputs.sha256 }}
-            SHA-1:   ${{ steps.cert.outputs.sha1 }}
-            ```
-
-            **SHA256 checksums:**
-            ```
-            ${{ steps.sha256.outputs.checksums }}
-            ```
+            ${{ steps.changelog.outputs.notes }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

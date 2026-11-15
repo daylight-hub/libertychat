@@ -606,13 +606,34 @@ fun SettingsScreen(
                         )
                     }
 
+                // "Check for Updates" opens the same popup as the start-up check when it finds
+                // a newer version (with what's new and the download for this build).
+                var updatePopupRequested by remember { mutableStateOf(false) }
+                val checkResult = state.updateCheckResult
+                LaunchedEffect(checkResult) {
+                    if (checkResult !is network.libertychat.app.service.AppUpdateResult.Checking &&
+                        checkResult !is network.libertychat.app.service.AppUpdateResult.UpdateAvailable
+                    ) {
+                        updatePopupRequested = false
+                    }
+                }
+                if (updatePopupRequested && checkResult is network.libertychat.app.service.AppUpdateResult.UpdateAvailable) {
+                    network.libertychat.app.ui.components.AppUpdateDialog(
+                        update = checkResult,
+                        onDismiss = { updatePopupRequested = false },
+                    )
+                }
+
                 AboutCard(
                     isExpanded = state.cardExpansionStates[SettingsCardId.ABOUT.name] ?: false,
                     onExpandedChange = { viewModel.toggleCardExpanded(SettingsCardId.ABOUT, it) },
                     systemInfo = systemInfo,
                     updateCheckResult = state.updateCheckResult,
                     includePrereleaseUpdates = state.includePrereleaseUpdates,
-                    onCheckForUpdates = { viewModel.checkForUpdates() },
+                    onCheckForUpdates = {
+                        updatePopupRequested = true
+                        viewModel.checkForUpdates()
+                    },
                     onSetIncludePrereleaseUpdates = { viewModel.setIncludePrereleaseUpdates(it) },
                     onCopySystemInfo = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

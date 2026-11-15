@@ -192,7 +192,7 @@ class UpdateChecker
                 tagName = tag,
                 htmlUrl = release.optString("html_url").ifEmpty { "https://github.com/$OWNER/$REPO/releases/latest" },
                 isPrerelease = release.optBoolean("prerelease"),
-                notes = UpdateSelection.tidyNotes(release.optString("body")),
+                notes = UpdateSelection.tidyNotes(UpdateSelection.whatsNew(release.optString("body"))),
                 apks = apks,
             )
         }

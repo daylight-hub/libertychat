@@ -4,6 +4,22 @@ All notable changes to Liberty Chat.
 
 ---
 
+## 2.3.6
+
+### Changed
+
+- The update popup shows just what's new in the release, in short, instead of the
+  whole release page.
+- Check for Updates in Settings > About opens the same popup when it finds a newer
+  version.
+- The splash screen no longer shows an upstream credit.
+
+### Added
+
+- The open-source license notices now ship inside the app.
+- Every release can be checked against its source code with
+  `gh attestation verify` (see the README).
+
 ## 2.3.5
 
 ### Added
