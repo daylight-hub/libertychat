@@ -225,11 +225,38 @@ jobs:
           # see published releases.
           draft: true
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}
-          # Only what's new: the app's update popup shows this text under its own
-          # "What's new" label (versions up to 2.3.5 show all of it). Install and
-          # verify steps are in the README.
+          # The app's update popup (2.3.6 and later) shows only the "What's new"
+          # section; the install table and verification stay on the release page.
           body: |
+            ### What's new
             ${{ steps.changelog.outputs.notes }}
+
+            ### Installation
+            Download the APK matching your phone's CPU. Most modern phones are
+            **arm64-v8a**; if unsure, use **universal**.
+
+            #### Python backend (`official-rns-py`)
+            | APK | Architecture | Devices |
+            |-----|-------------|---------|
+            | [`libertychat-${{ steps.version.outputs.version }}-official-rns-py-arm64-v8a.apk`](${{ steps.version.outputs.dl }}/libertychat-${{ steps.version.outputs.version }}-official-rns-py-arm64-v8a.apk) | arm64-v8a | Most modern Android phones & tablets |
+            | [`libertychat-${{ steps.version.outputs.version }}-official-rns-py-armeabi-v7a.apk`](${{ steps.version.outputs.dl }}/libertychat-${{ steps.version.outputs.version }}-official-rns-py-armeabi-v7a.apk) | armeabi-v7a | Older 32-bit ARM devices |
+            | [`libertychat-${{ steps.version.outputs.version }}-official-rns-py-x86_64.apk`](${{ steps.version.outputs.dl }}/libertychat-${{ steps.version.outputs.version }}-official-rns-py-x86_64.apk) | x86_64 | Chromebooks, emulators, some tablets |
+            | [`libertychat-${{ steps.version.outputs.version }}-official-rns-py-universal.apk`](${{ steps.version.outputs.dl }}/libertychat-${{ steps.version.outputs.version }}-official-rns-py-universal.apk) | All | Universal fallback (larger download) |
+
+            ### Verification
+            **Signing certificate fingerprints:**
+            ```
+            SHA-256: ${{ steps.cert.outputs.sha256 }}
+            SHA-1:   ${{ steps.cert.outputs.sha1 }}
+            ```
+
+            **SHA256 checksums:**
+            ```
+            ${{ steps.sha256.outputs.checksums }}
+            ```
+
+            **Built from this repository's source:** check any APK with
+            `gh attestation verify <file> -R ${{ github.repository }}`.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
