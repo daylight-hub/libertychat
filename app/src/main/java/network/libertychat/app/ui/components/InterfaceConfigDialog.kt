@@ -166,6 +166,7 @@ fun InterfaceConfigDialog(
                             "AutoInterface" -> AutoInterfaceFields(configState, onConfigUpdate)
                             "TCPClient" -> TCPClientFields(configState, onConfigUpdate)
                             "TCPServer" -> TCPServerFields(configState, onConfigUpdate)
+                            "UDP" -> UDPFields(configState, onConfigUpdate)
                             "AndroidBLE" -> AndroidBLEFields(configState, onConfigUpdate, scrollState)
                             "RNode" -> RNodeFields(configState, onConfigUpdate)
                         }
@@ -789,6 +790,78 @@ fun NetworkRestrictionSelector(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+@Composable
+fun UDPFields(
+    configState: InterfaceConfigState,
+    onConfigUpdate: (InterfaceConfigState) -> Unit,
+) {
+    Text(
+        "UDP Configuration",
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+    )
+
+    Text(
+        "Talks to Reticulum devices on your local network by UDP broadcast. Auto Discovery is " +
+            "easier for the same job; use UDP when you need specific ports or addresses.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    OutlinedTextField(
+        value = configState.listenIp,
+        onValueChange = { onConfigUpdate(configState.copy(listenIp = it.trim())) },
+        label = { Text("Listen IP") },
+        placeholder = { Text("0.0.0.0") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        isError = configState.listenIpError != null,
+        supportingText = { configState.listenIpError?.let { Text(it) } },
+    )
+
+    OutlinedTextField(
+        value = configState.listenPort,
+        onValueChange = { onConfigUpdate(configState.copy(listenPort = it)) },
+        label = { Text("Listen Port") },
+        placeholder = { Text("4242") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        isError = configState.listenPortError != null,
+        supportingText = { configState.listenPortError?.let { Text(it) } },
+    )
+
+    OutlinedTextField(
+        value = configState.forwardIp,
+        onValueChange = { onConfigUpdate(configState.copy(forwardIp = it.trim())) },
+        label = { Text("Forward IP") },
+        placeholder = { Text("255.255.255.255") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        isError = configState.forwardIpError != null,
+        supportingText = {
+            Column {
+                configState.forwardIpError?.let { Text(it) }
+                Text(
+                    "Use 255.255.255.255 to broadcast to everyone on this network.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+    )
+
+    OutlinedTextField(
+        value = configState.forwardPort,
+        onValueChange = { onConfigUpdate(configState.copy(forwardPort = it)) },
+        label = { Text("Forward Port") },
+        placeholder = { Text("4242") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        isError = configState.forwardPortError != null,
+        supportingText = { configState.forwardPortError?.let { Text(it) } },
+    )
 }
 
 @Composable

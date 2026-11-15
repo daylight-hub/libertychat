@@ -335,7 +335,7 @@ class InterfaceManagementScreenTest {
     }
 
     @Test
-    fun `InterfaceTypeSelector displays TCP Client option`() {
+    fun `InterfaceTypeSelector displays IP RNode or Command Center PRO option`() {
         composeTestRule.setContent {
             InterfaceTypeSelector(
                 onTypeSelected = {},
@@ -343,7 +343,7 @@ class InterfaceManagementScreenTest {
             )
         }
 
-        composeTestRule.onNodeWithText("TCP Client").assertIsDisplayed()
+        composeTestRule.onNodeWithText("IP RNode or Command Center PRO").assertIsDisplayed()
     }
 
     @Test
@@ -385,7 +385,7 @@ class InterfaceManagementScreenTest {
     }
 
     @Test
-    fun `InterfaceTypeSelector TCP Server hidden by default`() {
+    fun `InterfaceTypeSelector UDP hidden by default and TCP Server gone`() {
         composeTestRule.setContent {
             InterfaceTypeSelector(
                 onTypeSelected = {},
@@ -393,7 +393,8 @@ class InterfaceManagementScreenTest {
             )
         }
 
-        // TCP Server should not be visible initially (collapsed)
+        // UDP sits under Advanced (collapsed); TCP Server is no longer offered
+        composeTestRule.onNodeWithText("UDP Interface").assertDoesNotExist()
         composeTestRule.onNodeWithText("TCP Server").assertDoesNotExist()
     }
 
@@ -428,7 +429,7 @@ class InterfaceManagementScreenTest {
             )
         }
 
-        composeTestRule.onNodeWithText("TCP Client").performClick()
+        composeTestRule.onNodeWithText("IP RNode or Command Center PRO").performClick()
 
         assertEquals("TCPClient", selectedType)
     }

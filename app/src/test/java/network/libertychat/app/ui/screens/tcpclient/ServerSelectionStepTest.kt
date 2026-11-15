@@ -155,7 +155,7 @@ class ServerSelectionStepTest {
     }
 
     @Test
-    fun serverSelectionStep_displaysCustomOption() {
+    fun serverSelectionStep_hasNoCustomOption() {
         // Given
         val mockViewModel = mockk<TcpClientWizardViewModel>()
         every { mockViewModel.state } returns
@@ -170,8 +170,9 @@ class ServerSelectionStepTest {
         }
 
         // Then
-        composeTestRule.onNodeWithText("Custom").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Enter server details manually").assertIsDisplayed()
+        // only the LCS devices are offered; there's no manual entry
+        composeTestRule.onNodeWithText("Custom").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Enter server details manually").assertDoesNotExist()
     }
 
     // ========== Selection Tests ==========
@@ -220,48 +221,5 @@ class ServerSelectionStepTest {
         verify { mockViewModel.selectServer(any()) }
         assertTrue("selectServer should have been called", serverSlot.isCaptured)
         assertEquals(TcpClientWizardTestFixtures.testServer, serverSlot.captured)
-    }
-
-    @Test
-    fun customSettingsCard_onClick_callsEnableCustomMode() {
-        // Given
-        val mockViewModel = mockk<TcpClientWizardViewModel>()
-        every { mockViewModel.state } returns
-            MutableStateFlow(
-                TcpClientWizardTestFixtures.serverSelectionState(),
-            )
-        every { mockViewModel.getCommunityServers() } returns TcpClientWizardTestFixtures.testServers
-        var enableCustomModeCalled = false
-        every { mockViewModel.enableCustomMode() } answers { enableCustomModeCalled = true }
-
-        composeTestRule.setContent {
-            ServerSelectionStep(viewModel = mockViewModel)
-        }
-
-        // When
-        composeTestRule.onNodeWithText("Custom").performClick()
-
-        // Then
-        verify { mockViewModel.enableCustomMode() }
-        assertTrue("enableCustomMode should have been called", enableCustomModeCalled)
-    }
-
-    @Test
-    fun customMode_selected_showsCheckIcon() {
-        // Given
-        val mockViewModel = mockk<TcpClientWizardViewModel>()
-        every { mockViewModel.state } returns
-            MutableStateFlow(
-                TcpClientWizardTestFixtures.serverSelectionState(isCustomMode = true),
-            )
-        every { mockViewModel.getCommunityServers() } returns TcpClientWizardTestFixtures.testServers
-
-        // When
-        composeTestRule.setContent {
-            ServerSelectionStep(viewModel = mockViewModel)
-        }
-
-        // Then - Check icon on Custom card
-        composeTestRule.onNodeWithContentDescription("Selected").assertIsDisplayed()
     }
 }

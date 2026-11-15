@@ -103,6 +103,13 @@ fun ReviewConfigureStep(viewModel: TcpClientWizardViewModel) {
             placeholder = { Text("hostname or IP address") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
+            enabled = !state.hostLocked,
+            supportingText =
+                if (state.hostLocked) {
+                    { Text("Set by LCS, so it can't be changed here.") }
+                } else {
+                    null
+                },
         )
 
         Spacer(Modifier.height(16.dp))
