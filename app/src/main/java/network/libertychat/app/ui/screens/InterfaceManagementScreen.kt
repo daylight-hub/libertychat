@@ -14,6 +14,8 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -1440,7 +1442,9 @@ fun InterfaceTypeSelector(
         onDismissRequest = onDismiss,
         title = { Text("Select Interface Type") },
         text = {
+            // scrolls, so everything (and Advanced once opened) is reachable on small screens
             Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 // the subscription service, offered as its own interface type. Its host,
