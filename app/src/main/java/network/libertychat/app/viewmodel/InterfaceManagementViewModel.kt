@@ -126,9 +126,12 @@ data class InterfaceConfigState(
     val bleDiscoveryIntervalIdleMs: String = "30000",
     val bleScanDurationMs: String = "10000",
     val bleAdvertisingRefreshIntervalMs: String = "60000",
-    // TCPServer fields
+    // TCPServer and UDP fields
     val listenIp: String = "0.0.0.0",
     val listenPort: String = "4242",
+    // UDP fields
+    val forwardIp: String = "255.255.255.255",
+    val forwardPort: String = "4242",
     // RNode fields
     val targetDeviceName: String = "",
     // "classic" or "ble"
@@ -169,6 +172,8 @@ data class InterfaceConfigState(
     val codingRateError: String? = null,
     val listenIpError: String? = null,
     val listenPortError: String? = null,
+    val forwardIpError: String? = null,
+    val forwardPortError: String? = null,
     val socksProxyHostError: String? = null,
     val socksProxyPortError: String? = null,
 ) {
@@ -190,7 +195,8 @@ data class InterfaceConfigState(
 }
 
 private fun defaultNetworkRestriction(type: String): NetworkRestriction =
-    if (type == "AutoInterface") NetworkRestriction.WIFI_ONLY else NetworkRestriction.ANY
+    // local-network broadcast means nothing on mobile data
+    if (type == "AutoInterface" || type == "UDP") NetworkRestriction.WIFI_ONLY else NetworkRestriction.ANY
 
 /**
  * ViewModel for managing Reticulum network interface configurations.
@@ -1046,6 +1052,47 @@ class InterfaceManagementViewModel
                         }
                     }
                 }
+
+                "UDP" -> {
+                    when (val ipResult = InputValidator.validateHostname(config.listenIp)) {
+                        is ValidationResult.Error -> {
+                            _configState.value = _configState.value.copy(listenIpError = ipResult.message)
+                            isValid = false
+                        }
+                        is ValidationResult.Success -> {
+                            _configState.value =
+                                _configState.value.copy(listenIpError = null, listenIp = ipResult.value)
+                        }
+                    }
+                    when (val portResult = InputValidator.validatePort(config.listenPort)) {
+                        is ValidationResult.Error -> {
+                            _configState.value = _configState.value.copy(listenPortError = portResult.message)
+                            isValid = false
+                        }
+                        is ValidationResult.Success -> {
+                            _configState.value = _configState.value.copy(listenPortError = null)
+                        }
+                    }
+                    when (val ipResult = InputValidator.validateHostname(config.forwardIp)) {
+                        is ValidationResult.Error -> {
+                            _configState.value = _configState.value.copy(forwardIpError = ipResult.message)
+                            isValid = false
+                        }
+                        is ValidationResult.Success -> {
+                            _configState.value =
+                                _configState.value.copy(forwardIpError = null, forwardIp = ipResult.value)
+                        }
+                    }
+                    when (val portResult = InputValidator.validatePort(config.forwardPort)) {
+                        is ValidationResult.Error -> {
+                            _configState.value = _configState.value.copy(forwardPortError = portResult.message)
+                            isValid = false
+                        }
+                        is ValidationResult.Success -> {
+                            _configState.value = _configState.value.copy(forwardPortError = null)
+                        }
+                    }
+                }
             }
 
             return isValid
@@ -1132,6 +1179,19 @@ class InterfaceManagementViewModel
                         mode = config.mode,
                         networkName = config.networkName.orEmpty(),
                         passphrase = config.passphrase.orEmpty(),
+                        networkRestriction = config.networkRestriction.value,
+                    )
+
+                is InterfaceConfig.UDP ->
+                    InterfaceConfigState(
+                        name = config.name,
+                        type = "UDP",
+                        enabled = config.enabled,
+                        listenIp = config.listenIp,
+                        listenPort = config.listenPort.toString(),
+                        forwardIp = config.forwardIp,
+                        forwardPort = config.forwardPort.toString(),
+                        mode = config.mode,
                         networkRestriction = config.networkRestriction.value,
                     )
 
@@ -1253,6 +1313,19 @@ class InterfaceManagementViewModel
                             },
                         networkName = state.networkName.trim().ifEmpty { null },
                         passphrase = state.passphrase.trim().ifEmpty { null },
+                        networkRestriction = restriction,
+                    )
+
+                "UDP" ->
+                    InterfaceConfig.UDP(
+                        name = state.name.trim(),
+                        enabled = state.enabled,
+                        listenIp = state.listenIp.trim(),
+                        listenPort = state.listenPort.toIntOrNull() ?: 4242,
+                        forwardIp = state.forwardIp.trim(),
+                        forwardPort = state.forwardPort.toIntOrNull() ?: 4242,
+                        // same reasoning as TCPServer: the shared "roaming" default is wrong here
+                        mode = if (state.mode.isEmpty() || state.mode == "roaming") "full" else state.mode,
                         networkRestriction = restriction,
                     )
 

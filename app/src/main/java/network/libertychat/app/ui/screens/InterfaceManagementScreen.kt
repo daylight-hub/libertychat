@@ -596,10 +596,10 @@ fun InterfaceManagementScreen(
                     network.libertychat.app.gateway.GatewayConfig.MENU_TYPE -> showGatewayOffer = true
                     "RNode" -> onNavigateToRNodeWizard(null)
                     "TCPClient" -> onNavigateToTcpClientWizard(null)
-                    "TCPServer" -> {
+                    "UDP" -> {
                         viewModel.showAddDialog()
                         viewModel.updateConfigState {
-                            it.copy(type = type, name = "TCP Server", mode = "full")
+                            it.copy(type = type, name = "UDP Interface", mode = "full")
                         }
                     }
                     // AutoInterface added from Settings defaults to gateway mode,
@@ -1455,9 +1455,11 @@ fun InterfaceTypeSelector(
                     description = "Automatically discover peers on local network",
                     onClick = { onTypeSelected("AutoInterface") },
                 )
+                // IP RNode and Command Center PRO: LCS hardware on your own network.
+                // Their addresses are set by LCS (see TcpCommunityServers).
                 InterfaceTypeOption(
-                    title = "TCP Client",
-                    description = "Connect to a remote Reticulum transport node",
+                    title = "IP RNode or Command Center PRO",
+                    description = "An LCS radio or Command Center PRO on your own network",
                     onClick = { onTypeSelected("TCPClient") },
                 )
                 InterfaceTypeOption(
@@ -1514,9 +1516,9 @@ fun InterfaceTypeSelector(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         InterfaceTypeOption(
-                            title = "TCP Server",
-                            description = "Accept incoming connections from other Reticulum nodes",
-                            onClick = { onTypeSelected("TCPServer") },
+                            title = "UDP Interface",
+                            description = "Broadcast to Reticulum devices on your local network",
+                            onClick = { onTypeSelected("UDP") },
                         )
                     }
                 }

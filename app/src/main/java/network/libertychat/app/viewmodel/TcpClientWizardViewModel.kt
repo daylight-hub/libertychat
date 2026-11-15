@@ -42,6 +42,8 @@ data class TcpClientWizardState(
     // Server selection
     val selectedServer: TcpCommunityServer? = null,
     val isCustomMode: Boolean = false,
+    // IP RNode and Command Center PRO keep the address LCS set
+    val hostLocked: Boolean = false,
     // Configuration fields
     val interfaceName: String = "",
     val targetHost: String = "",
@@ -110,6 +112,7 @@ class TcpClientWizardViewModel
                             editingInterfaceId = interfaceId,
                             selectedServer = matchingServer,
                             isCustomMode = matchingServer == null,
+                            hostLocked = TcpCommunityServers.isLockedHost(config.targetHost),
                             interfaceName = config.name,
                             targetHost = config.targetHost,
                             targetPort = config.targetPort.toString(),
@@ -156,6 +159,7 @@ class TcpClientWizardViewModel
                 it.copy(
                     selectedServer = matchingServer,
                     isCustomMode = matchingServer == null,
+                    hostLocked = TcpCommunityServers.isLockedHost(host),
                     interfaceName = name,
                     targetHost = host,
                     targetPort = port.toString(),
@@ -205,6 +209,7 @@ class TcpClientWizardViewModel
                 it.copy(
                     selectedServer = server,
                     isCustomMode = false,
+                    hostLocked = TcpCommunityServers.isLockedHost(server.host),
                     interfaceName = server.name,
                     targetHost = server.host,
                     targetPort = server.port.toString(),
@@ -223,6 +228,7 @@ class TcpClientWizardViewModel
                 it.copy(
                     selectedServer = null,
                     isCustomMode = true,
+                    hostLocked = false,
                     interfaceName = "",
                     targetHost = "",
                     targetPort = "",
@@ -254,6 +260,7 @@ class TcpClientWizardViewModel
          * Auto-enables SOCKS proxy when a .onion address is entered.
          */
         fun updateTargetHost(value: String) {
+            if (_state.value.hostLocked) return
             val isOnion = value.trim().endsWith(".onion")
             _state.update {
                 it.copy(

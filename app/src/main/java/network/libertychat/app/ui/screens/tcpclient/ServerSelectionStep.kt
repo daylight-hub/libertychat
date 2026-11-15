@@ -27,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import network.libertychat.app.data.model.TcpCommunityServer
-import network.libertychat.app.ui.components.CustomSettingsCard
 import network.libertychat.app.viewmodel.TcpClientWizardViewModel
 
 /**
@@ -55,7 +54,7 @@ fun ServerSelectionStep(viewModel: TcpClientWizardViewModel) {
         Spacer(Modifier.height(8.dp))
 
         Text(
-            text = "Select a community server or enter custom connection details.",
+            text = "Choose the LCS device on your network.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -77,15 +76,6 @@ fun ServerSelectionStep(viewModel: TcpClientWizardViewModel) {
                 )
             }
 
-            // Custom option
-            item {
-                CustomSettingsCard(
-                    title = "Custom",
-                    description = "Enter server details manually",
-                    isSelected = state.isCustomMode,
-                    onClick = { viewModel.enableCustomMode() },
-                )
-            }
 
             // Bottom spacing for navigation bar
             item {

@@ -58,6 +58,11 @@ object TcpCommunityServers {
     val commandCenter: TcpCommunityServer?
         get() = servers.firstOrNull { it.host == "liberty.local" && it.port == 4246 }
 
+    /** LCS: hosts set by LCS (IP RNode, Command Center PRO) that can't be changed in the app. */
+    private val lockedHosts = setOf("iprnode.local", "liberty.local")
+
+    fun isLockedHost(host: String?): Boolean = host.orEmpty().trim().lowercase().removeSuffix(".") in lockedHosts
+
     /**
      * Get only servers marked as bootstrap candidates.
      */
